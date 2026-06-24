@@ -1,0 +1,146 @@
+---
+pid: 22752
+cwd: "C:\Users\BIT\neonatal-resuscitation-simulator"
+command: "Set-Location C:\\Users\\BIT\\neonatal-resuscitation-simulator\\backend; py -3.10 -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+started_at: 2026-06-21T21:18:34.999Z
+running_for_ms: 59800006 
+---
+INFO:     Started server process [25060]
+INFO:     Waiting for application startup.
+{"timestamp": "2026-06-21T21:18:40.342592+00:00", "level": "INFO", "logger": "app.main", "message": "Application startup complete", "app": "Neonatal Resuscitation Simulator", "event": "startup"}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58021 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58022 - "GET /api/scenarios/scenarios HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58023 - "GET /api/scenarios/scenarios/baby_birth/validate HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:58024 - "POST /api/sessions/sessions/start HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58025 - "WebSocket /api/ws/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/student" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:58026 - "GET /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c HTTP/1.1" 200 OK
+INFO:     connection closed
+INFO:     127.0.0.1:58027 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58028 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58029 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58030 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58031 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58033 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58034 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58035 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58036 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/timer/ventilation_timer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58037 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/timer/heart_rate_reassessment_timer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58041 - "WebSocket /api/ws/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/student" [accepted]
+INFO:     127.0.0.1:58038 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58039 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/timer/continue_ventilation_timer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58040 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/input HTTP/1.1" 200 OK
+INFO:     connection open
+INFO:     127.0.0.1:58042 - "GET /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c HTTP/1.1" 200 OK
+INFO:     connection closed
+INFO:     127.0.0.1:58043 - "POST /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c/stop HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58044 - "GET /api/sessions/sessions/f8406f4a-90bb-4567-90b4-2bcce917ba2c HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58045 - "POST /api/sessions/sessions/start HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58046 - "POST /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58055 - "WebSocket /api/ws/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18/student" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:58047 - "POST /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58048 - "POST /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58049 - "POST /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58050 - "POST /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58051 - "POST /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58052 - "POST /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58053 - "POST /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58054 - "GET /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58056 - "GET /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18 HTTP/1.1" 200 OK
+INFO:     connection closed
+INFO:     127.0.0.1:58057 - "POST /api/sessions/sessions/8fc6cd4d-bd0b-405e-8bd1-dcf4f3d66d18/stop HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58059 - "POST /api/scenarios/scenarios/baby_birth/validate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58060 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58061 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58062 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58065 - "POST /api/sessions/sessions/start HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58066 - "WebSocket /api/ws/sessions/17ab90b8-bc03-40b2-ae98-4451b0817afe/student" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:58067 - "POST /api/sessions/sessions/17ab90b8-bc03-40b2-ae98-4451b0817afe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58068 - "POST /api/sessions/sessions/17ab90b8-bc03-40b2-ae98-4451b0817afe/stop HTTP/1.1" 200 OK
+INFO:     connection closed
+INFO:     127.0.0.1:58071 - "POST /api/sessions/sessions/start HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58072 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58073 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58074 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58075 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58076 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58077 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58078 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58079 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58080 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/timer/ventilation_timer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58081 - "GET /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58082 - "WebSocket /api/ws/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/student" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:58083 - "GET /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928 HTTP/1.1" 200 OK
+INFO:     connection closed
+INFO:     127.0.0.1:58084 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58085 - "WebSocket /api/ws/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/student" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:49750 - "GET /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49751 - "POST /api/sessions/sessions/5df9d264-30d4-4047-bc0a-0769e6947928/stop HTTP/1.1" 200 OK
+INFO:     connection closed
+INFO:     127.0.0.1:49767 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49672 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49673 - "POST /api/sessions/sessions/start HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49674 - "POST /api/sessions/sessions/17188175-8a59-454f-a611-81f9493131d7/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49675 - "POST /api/sessions/sessions/17188175-8a59-454f-a611-81f9493131d7/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49682 - "POST /api/sessions/sessions/17188175-8a59-454f-a611-81f9493131d7/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49683 - "POST /api/sessions/sessions/17188175-8a59-454f-a611-81f9493131d7/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49684 - "POST /api/sessions/sessions/17188175-8a59-454f-a611-81f9493131d7/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49685 - "POST /api/sessions/sessions/17188175-8a59-454f-a611-81f9493131d7/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49686 - "POST /api/sessions/sessions/17188175-8a59-454f-a611-81f9493131d7/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49687 - "POST /api/sessions/sessions/17188175-8a59-454f-a611-81f9493131d7/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49688 - "POST /api/sessions/sessions/start HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49689 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49690 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49691 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49692 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49693 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49694 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49695 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49696 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49697 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/timer/ventilation_timer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49698 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/timer/heart_rate_reassessment_timer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49699 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49700 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/timer/continue_ventilation_timer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49701 - "POST /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49702 - "GET /api/sessions/sessions/5099df86-0d4f-4095-aab6-8249408e8f3b/export/csv HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:62532 - "OPTIONS /api/scenarios/scenarios HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:54180 - "OPTIONS /api/scenarios/scenarios HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:63619 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49821 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49821 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49821 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49821 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49821 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49821 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49821 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49821 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49821 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:63103 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:63103 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:63103 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:63103 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:52896 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:52896 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:52896 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:52896 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:52896 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:57679 - "OPTIONS /api/scenarios/scenarios HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:62401 - "OPTIONS /api/scenarios/scenarios HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49777 - "OPTIONS /api/scenarios/scenarios HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52383 - "OPTIONS /api/scenarios/scenarios HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49777 - "GET /api/scenarios/scenarios HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49670 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49670 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54368 - "OPTIONS /api/scenarios/scenarios HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:54176 - "OPTIONS /api/scenarios/scenarios HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:63623 - "OPTIONS /api/sessions/sessions/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:58892 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60223 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60223 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50832 - "POST /api/sessions/sessions/start HTTP/1.1" 200 OK

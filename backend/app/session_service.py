@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from datetime import datetime, timezone
 from threading import RLock
 from typing import Any, Literal
@@ -129,4 +128,4 @@ class SessionManager:
         return record
 
     def _copy_record(self, record: SessionRecord) -> SessionRecord:
-        return deepcopy(record)
+        return record.model_copy(deep=False)

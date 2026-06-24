@@ -1,0 +1,39 @@
+# Neonatal Resuscitation Simulator — backend runtime dependencies
+# Generated from Python 3.10.9 / pip 26.1.2
+# Install with: pip install -r requirements.txt
+
+# Web framework
+fastapi==0.137.0
+starlette==1.3.1
+uvicorn==0.49.0
+
+# Data validation
+pydantic==2.13.4
+pydantic-core==2.46.4
+pydantic-settings==2.14.1
+annotated-types==0.7.0
+annotated-doc==0.0.4
+typing-extensions==4.15.0
+typing-inspection==0.4.2
+
+# Environment / settings
+python-dotenv==1.2.2
+
+# Database ORM
+SQLAlchemy==2.0.50
+greenlet==3.5.1
+
+# Database drivers
+aiosqlite==0.22.1       # SQLite (default / demo)
+asyncpg==0.31.0         # PostgreSQL (optional)
+async-timeout==5.0.1    # asyncpg dependency
+
+# Async runtime
+anyio==4.13.0
+exceptiongroup==1.3.1
+idna==3.18
+
+# HTTP / server
+h11==0.16.0
+click==8.4.1
+colorama==0.4.6

@@ -1,0 +1,66 @@
+version: "3.9"
+
+# ── Neonatal Resuscitation Simulator ─────────────────────────────────────────
+#
+# Quickstart:
+#   1. Copy .env.example to .env and set JWT_SECRET_KEY
+#   2. docker compose up --build
+#
+# Student view:    http://localhost:5173
+# Instructor view: http://localhost:5173/?role=instructor
+# Backend API:     http://localhost:8000
+# Health check:    http://localhost:8000/health
+# API docs:        http://localhost:8000/docs
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: "Neonatal Resuscitation Simulator"
+      DEBUG: "false"
+      # Absolute path inside the container — survives any CWD ambiguity.
+      DATABASE_URL: "sqlite+aiosqlite:////app/data/neonatal.db"
+      # Required: set in .env file or export before running docker compose.
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+      # Must include the frontend origin. Adjust if deploying to a non-localhost host.
+      ALLOWED_ORIGINS: '["http://localhost:5173"]'
+    volumes:
+      # Named volume keeps the SQLite database across container restarts and rebuilds.
+      - nrs_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # These are baked into the compiled JS at build time.
+        # Change them here (or in .env) if the backend is on a different host/port.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_WS_BASE_URL: ${VITE_WS_BASE_URL:-ws://localhost:8000}
+    ports:
+      # nginx listens on 80 inside; exposed as 5173 on the host.
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  # Stores neonatal.db at /app/data inside the backend container.
+  # Survives: container restarts, image rebuilds, docker compose down (but NOT docker compose down -v).
+  nrs_data:

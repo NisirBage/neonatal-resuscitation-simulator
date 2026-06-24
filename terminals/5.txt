@@ -1,0 +1,20 @@
+---
+pid: 9796
+cwd: "C:\Users\BIT\neonatal-resuscitation-simulator"
+command: "Set-Location C:\\Users\\BIT\\neonatal-resuscitation-simulator\\frontend; npm run dev"
+started_at: 2026-06-21T21:18:58.175Z
+running_for_ms: 59774988 
+---
+
+> neonatal-resuscitation-simulator-frontend@0.1.0 dev
+> vite --host 127.0.0.1
+
+Port 5173 is in use, trying another one...
+
+  VITE v7.3.5  ready in 1083 ms
+
+  ➜  Local:   http://127.0.0.1:5174/
+3:04:29 am [vite] (client) hmr update /src/pages/StudentDashboard.tsx, /src/index.css
+3:04:29 am [vite] (client) hmr update /src/index.css, /src/pages/StudentDashboard.tsx
+3:04:29 am [vite] (client) hmr update /src/index.css, /src/components/DemoModePanel.tsx
+3:04:30 am [vite] (client) hmr update /src/pages/StudentDashboard.tsx, /src/index.css

@@ -1,0 +1,28 @@
+---
+pid: 29588
+cwd: "C:\Users\BIT\neonatal-resuscitation-simulator"
+command: "Set-Location C:\\Users\\BIT\\neonatal-resuscitation-simulator\\backend; py -3.10 -m uvicorn app.main:app --host 127.0.0.1 --port 8001"
+started_at: 2026-06-21T21:35:09.854Z
+running_for_ms: 58805003 
+---
+INFO:     Started server process [22200]
+INFO:     Waiting for application startup.
+{"timestamp": "2026-06-21T21:35:13.593447+00:00", "level": "INFO", "logger": "app.main", "message": "Application startup complete", "app": "Neonatal Resuscitation Simulator", "event": "startup"}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8001 (Press CTRL+C to quit)
+INFO:     127.0.0.1:49705 - "POST /api/sessions/sessions/start HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49706 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49707 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49708 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49709 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49710 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49711 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49712 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49713 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49714 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/timer/ventilation_timer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49715 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/timer/heart_rate_reassessment_timer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49716 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49717 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/timer/continue_ventilation_timer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49718 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/input HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49719 - "GET /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/export/csv HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49720 - "POST /api/sessions/sessions/ffbfee2c-8e40-41db-b3a2-4e501b24e3fe/stop HTTP/1.1" 200 OK

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
+from threading import RLock
 from typing import Any
 from uuid import UUID
 
 from app.events import EventBus
 from app.scenario import Scenario
+from app.services.session_service import mark_session_stopped, upsert_session
 from app.session_service import SessionManager, SessionRecord
 
 
@@ -17,6 +20,8 @@ class ScenarioRunner:
     ) -> None:
         self.session_manager = session_manager or SessionManager()
         self.event_bus = event_bus or EventBus()
+        self._timer_tasks: dict[UUID, dict[str, asyncio.Task[None]]] = {}
+        self._timer_lock = RLock()
 
     async def start_session(
         self,
@@ -39,9 +44,12 @@ class ScenarioRunner:
                 "current_state_id": record.engine.get_current_state().id,
             },
         )
+        self._schedule_auto_start_timers(record)
+        await upsert_session(record)
         return record
 
     async def stop_session(self, session_id: UUID) -> SessionRecord:
+        self._cancel_session_timers(session_id)
         record = await self.session_manager.remove_session(session_id)
         await self.event_bus.publish(
             "session.stopped",
@@ -53,6 +61,7 @@ class ScenarioRunner:
                 "status": record.status,
             },
         )
+        await mark_session_stopped(session_id)
         return record
 
     async def process_student_input(
@@ -63,6 +72,7 @@ class ScenarioRunner:
     ) -> SessionRecord:
         record = self._get_active_session(session_id)
         self._ensure_running(record)
+        previous_state_id = record.engine.serialize()["current_state_id"]
         state = record.engine.process_student_input(
             action_id=action_id,
             response=response,
@@ -80,6 +90,9 @@ class ScenarioRunner:
             },
         )
         await self._publish_latest_fsm_event(record)
+        self._schedule_auto_start_timers(record, previous_state_id)
+        if record.engine.get_history()[-1].type == "state_transition":
+            await upsert_session(record)
         return record
 
     async def process_audio_input(
@@ -91,6 +104,7 @@ class ScenarioRunner:
     ) -> SessionRecord:
         record = self._get_active_session(session_id)
         self._ensure_running(record)
+        previous_state_id = record.engine.serialize()["current_state_id"]
         state = record.engine.process_audio_input(
             action_id=action_id,
             transcript=transcript,
@@ -114,6 +128,9 @@ class ScenarioRunner:
             payload=payload,
         )
         await self._publish_latest_fsm_event(record)
+        self._schedule_auto_start_timers(record, previous_state_id)
+        if record.engine.get_history()[-1].type == "state_transition":
+            await upsert_session(record)
         return record
 
     async def process_timer(
@@ -123,6 +140,7 @@ class ScenarioRunner:
     ) -> SessionRecord:
         record = self._get_active_session(session_id)
         self._ensure_running(record)
+        previous_state_id = record.engine.serialize()["current_state_id"]
         state = record.engine.process_timer_event(timer_id)
         self._touch(record)
         await self.event_bus.publish(
@@ -136,6 +154,9 @@ class ScenarioRunner:
             },
         )
         await self._publish_latest_fsm_event(record)
+        self._schedule_auto_start_timers(record, previous_state_id)
+        if record.engine.get_history()[-1].type == "state_transition":
+            await upsert_session(record)
         return record
 
     async def process_instructor_action(
@@ -145,6 +166,7 @@ class ScenarioRunner:
     ) -> SessionRecord:
         record = self._get_active_session(session_id)
         self._ensure_running(record)
+        previous_state_id = record.engine.serialize()["current_state_id"]
         state = record.engine.process_instructor_event(event_name)
         self._touch(record)
         await self.event_bus.publish(
@@ -158,7 +180,25 @@ class ScenarioRunner:
             },
         )
         await self._publish_latest_fsm_event(record)
+        self._schedule_auto_start_timers(record, previous_state_id)
+        if record.engine.get_history()[-1].type == "state_transition":
+            await upsert_session(record)
         return record
+
+    async def restore_session(self, record: SessionRecord) -> None:
+        with self.session_manager._lock:
+            self.session_manager._sessions[record.session_id] = record
+        self._schedule_auto_start_timers(record)
+        await self.event_bus.publish(
+            "session.restored",
+            session_id=record.session_id,
+            source="scenario_runner",
+            aggregate_id=str(record.session_id),
+            payload={
+                "scenario_id": record.scenario.id,
+                "current_state_id": record.engine.get_current_state().id,
+            },
+        )
 
     async def _publish_latest_fsm_event(self, record: SessionRecord) -> None:
         history = record.engine.get_history()
@@ -184,3 +224,66 @@ class ScenarioRunner:
 
     def _touch(self, record: SessionRecord) -> None:
         record.updated_at = datetime.now(timezone.utc)
+
+    def _schedule_auto_start_timers(
+        self,
+        record: SessionRecord,
+        previous_state_id: str | None = None,
+    ) -> None:
+        current_state = record.engine.get_current_state()
+        if previous_state_id == current_state.id:
+            return
+
+        self._cancel_session_timers(record.session_id)
+
+        auto_start_timers = [
+            timer for timer in current_state.timers if timer.auto_start
+        ]
+        if not auto_start_timers:
+            return
+
+        with self._timer_lock:
+            session_tasks = self._timer_tasks.setdefault(record.session_id, {})
+            for timer in auto_start_timers:
+                session_tasks[timer.id] = asyncio.create_task(
+                    self._run_auto_timer(
+                        session_id=record.session_id,
+                        timer_id=timer.id,
+                        duration_seconds=timer.duration_seconds,
+                    )
+                )
+
+    def _cancel_session_timers(self, session_id: UUID) -> None:
+        current_task = asyncio.current_task()
+        with self._timer_lock:
+            session_tasks = self._timer_tasks.pop(session_id, {})
+
+        for task in session_tasks.values():
+            if task is not current_task and not task.done():
+                task.cancel()
+
+    async def _run_auto_timer(
+        self,
+        session_id: UUID,
+        timer_id: str,
+        duration_seconds: int,
+    ) -> None:
+        try:
+            await asyncio.sleep(duration_seconds)
+            await self.process_timer(session_id=session_id, timer_id=timer_id)
+        except asyncio.CancelledError:
+            raise
+        except (KeyError, RuntimeError):
+            return
+        finally:
+            current_task = asyncio.current_task()
+            with self._timer_lock:
+                session_tasks = self._timer_tasks.get(session_id)
+                if session_tasks is None:
+                    return
+
+                if session_tasks.get(timer_id) is current_task:
+                    session_tasks.pop(timer_id, None)
+
+                if not session_tasks:
+                    self._timer_tasks.pop(session_id, None)

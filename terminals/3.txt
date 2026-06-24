@@ -1,0 +1,8 @@
+---
+pid: 11660
+cwd: "C:\Users\BIT\neonatal-resuscitation-simulator"
+command: "Set-Location C:\\Users\\BIT\\neonatal-resuscitation-simulator\\backend; py -3.10 -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+started_at: 2026-06-21T21:17:30.941Z
+running_for_ms: 59860002 
+---
+C:\Users\BIT\AppData\Local\Programs\Python\Python310\python.exe: No module named uvicorn

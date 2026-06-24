@@ -1,0 +1,1014 @@
+{
+  "id": "baby_birth",
+  "name": "Baby Birth Neonatal Resuscitation Workflow",
+  "version": "1.0.0",
+  "initial_state": "baby_born",
+  "metadata": {
+    "source": "professor_neonatal_resuscitation_flowcharts",
+    "description": "JSON-driven neonatal resuscitation workflow from birth through transition into advanced resuscitation.",
+    "protocol_logic_location": "scenario_json"
+  },
+  "states": [
+    {
+      "id": "baby_born",
+      "name": "Baby Born",
+      "description": "The baby has just been born and the birth timer starts.",
+      "actions": [
+        {
+          "id": "confirm_birth",
+          "type": "yes_no",
+          "prompt": "Has the baby been born?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "role": "student"
+          }
+        }
+      ],
+      "timers": [
+        {
+          "id": "birth_timer",
+          "duration_seconds": 60,
+          "event": "birth_timer_elapsed",
+          "auto_start": true,
+          "metadata": {
+            "label": "Birth timer"
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "birth_confirmed",
+          "trigger": "action",
+          "target_state": "put_on_mothers_chest",
+          "action_id": "confirm_birth",
+          "expected_response": "yes"
+        },
+        {
+          "id": "birth_timer_elapsed",
+          "trigger": "timer",
+          "target_state": "put_on_mothers_chest",
+          "timer_id": "birth_timer"
+        },
+        {
+          "id": "instructor_start_birth_workflow",
+          "trigger": "instructor",
+          "target_state": "put_on_mothers_chest",
+          "instructor_event": "start_birth_workflow"
+        }
+      ]
+    },
+    {
+      "id": "put_on_mothers_chest",
+      "name": "Put Baby On Mother's Chest",
+      "description": "Student places the baby on the mother's chest before initial assessment.",
+      "actions": [
+        {
+          "id": "placed_on_chest",
+          "type": "yes_no",
+          "prompt": "Did you put the baby on mother's chest?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "role": "student"
+          }
+        },
+        {
+          "id": "verbalize_initial_steps",
+          "type": "audio",
+          "prompt": "Verbalize the immediate initial steps.",
+          "transcript_required": true,
+          "metadata": {
+            "accepted_response_source": "transcription"
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "chest_placement_done",
+          "trigger": "action",
+          "target_state": "initial_steps",
+          "action_id": "placed_on_chest",
+          "expected_response": "yes"
+        },
+        {
+          "id": "initial_steps_verbalized",
+          "trigger": "action",
+          "target_state": "initial_steps",
+          "action_id": "verbalize_initial_steps",
+          "transcript_match": "chest"
+        },
+        {
+          "id": "instructor_advance_to_crying",
+          "trigger": "instructor",
+          "target_state": "initial_steps",
+          "instructor_event": "advance_to_crying_assessment"
+        }
+      ]
+    },
+    {
+      "id": "initial_steps",
+      "name": "Initial Steps",
+      "description": "Student performs initial neonatal steps before crying assessment.",
+      "actions": [
+        {
+          "id": "warm_dry_stimulate",
+          "type": "yes_no",
+          "prompt": "Did you warm, dry, and stimulate the baby?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "initial_steps"
+          }
+        },
+        {
+          "id": "position_airway",
+          "type": "yes_no",
+          "prompt": "Did you position the airway?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "initial_steps"
+          }
+        },
+        {
+          "id": "clear_airway_if_needed",
+          "type": "yes_no",
+          "prompt": "Did you clear the airway if needed?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "initial_steps"
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "warm_dry_stimulate_done",
+          "trigger": "action",
+          "target_state": "initial_steps",
+          "action_id": "warm_dry_stimulate",
+          "expected_response": "yes"
+        },
+        {
+          "id": "position_airway_done",
+          "trigger": "action",
+          "target_state": "initial_steps",
+          "action_id": "position_airway",
+          "expected_response": "yes"
+        },
+        {
+          "id": "initial_steps_completed",
+          "trigger": "action",
+          "target_state": "crying_assessment",
+          "action_id": "clear_airway_if_needed",
+          "expected_response": "yes"
+        },
+        {
+          "id": "instructor_initial_steps_complete",
+          "trigger": "instructor",
+          "target_state": "crying_assessment",
+          "instructor_event": "initial_steps_complete"
+        }
+      ]
+    },
+    {
+      "id": "crying_assessment",
+      "name": "Is Baby Crying?",
+      "description": "Student assesses whether the baby is crying.",
+      "actions": [
+        {
+          "id": "is_baby_crying",
+          "type": "yes_no",
+          "prompt": "Is the baby crying?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "assessment": "crying"
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "baby_crying",
+          "trigger": "action",
+          "target_state": "routine_observation",
+          "action_id": "is_baby_crying",
+          "expected_response": "yes"
+        },
+        {
+          "id": "baby_not_crying",
+          "trigger": "action",
+          "target_state": "apnea_assessment",
+          "action_id": "is_baby_crying",
+          "expected_response": "no"
+        },
+        {
+          "id": "instructor_marks_not_crying",
+          "trigger": "instructor",
+          "target_state": "apnea_assessment",
+          "instructor_event": "baby_not_crying"
+        }
+      ]
+    },
+    {
+      "id": "apnea_assessment",
+      "name": "Apnea Assessment",
+      "description": "Student assesses apnea or ineffective breathing.",
+      "actions": [
+        {
+          "id": "is_apneic",
+          "type": "yes_no",
+          "prompt": "Is the baby apneic or not breathing effectively?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "assessment": "breathing"
+          }
+        },
+        {
+          "id": "describe_breathing",
+          "type": "text",
+          "prompt": "Describe the baby's breathing.",
+          "metadata": {
+            "accepted_response_examples": [
+              "apnea",
+              "gasping",
+              "breathing"
+            ]
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "apnea_present",
+          "trigger": "action",
+          "target_state": "heart_rate_assessment",
+          "action_id": "is_apneic",
+          "expected_response": "yes"
+        },
+        {
+          "id": "apnea_absent",
+          "trigger": "action",
+          "target_state": "heart_rate_assessment",
+          "action_id": "is_apneic",
+          "expected_response": "no"
+        },
+        {
+          "id": "text_apnea_present",
+          "trigger": "action",
+          "target_state": "heart_rate_assessment",
+          "action_id": "describe_breathing",
+          "text_match": "apnea"
+        },
+        {
+          "id": "text_gasping_present",
+          "trigger": "action",
+          "target_state": "heart_rate_assessment",
+          "action_id": "describe_breathing",
+          "text_match": "gasping"
+        },
+        {
+          "id": "text_breathing_present",
+          "trigger": "action",
+          "target_state": "heart_rate_assessment",
+          "action_id": "describe_breathing",
+          "text_match": "breathing"
+        },
+        {
+          "id": "instructor_sends_to_hr",
+          "trigger": "instructor",
+          "target_state": "heart_rate_assessment",
+          "instructor_event": "assess_heart_rate"
+        }
+      ]
+    },
+    {
+      "id": "heart_rate_assessment",
+      "name": "Heart Rate Assessment",
+      "description": "Student assesses heart rate and chooses the next pathway.",
+      "actions": [
+        {
+          "id": "heart_rate_category",
+          "type": "text",
+          "prompt": "Enter heart rate category: under_100, 100_or_more, or under_60.",
+          "metadata": {
+            "response_format": "category"
+          }
+        },
+        {
+          "id": "announce_heart_rate",
+          "type": "audio",
+          "prompt": "Announce the heart rate assessment.",
+          "transcript_required": true,
+          "metadata": {
+            "accepted_response_source": "transcription"
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "hr_under_100",
+          "trigger": "action",
+          "target_state": "ventilation_path",
+          "action_id": "heart_rate_category",
+          "expected_response": "under_100"
+        },
+        {
+          "id": "hr_100_or_more",
+          "trigger": "action",
+          "target_state": "simulation_complete",
+          "action_id": "heart_rate_category",
+          "expected_response": "100_or_more"
+        },
+        {
+          "id": "hr_under_60",
+          "trigger": "action",
+          "target_state": "ventilation_path",
+          "action_id": "heart_rate_category",
+          "expected_response": "under_60"
+        },
+        {
+          "id": "audio_hr_under_100",
+          "trigger": "action",
+          "target_state": "ventilation_path",
+          "action_id": "announce_heart_rate",
+          "transcript_match": "under 100"
+        },
+        {
+          "id": "instructor_hr_under_100",
+          "trigger": "instructor",
+          "target_state": "ventilation_path",
+          "instructor_event": "heart_rate_under_100"
+        },
+        {
+          "id": "instructor_hr_100_or_more",
+          "trigger": "instructor",
+          "target_state": "simulation_complete",
+          "instructor_event": "heart_rate_100_or_more"
+        }
+      ]
+    },
+    {
+      "id": "ventilation_path",
+      "name": "Ventilation Path",
+      "description": "Student begins positive pressure ventilation pathway.",
+      "actions": [
+        {
+          "id": "start_ventilation",
+          "type": "yes_no",
+          "prompt": "Did you start ventilation?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "ventilation"
+          }
+        },
+        {
+          "id": "verbalize_ventilation",
+          "type": "audio",
+          "prompt": "Verbalize that ventilation has started.",
+          "transcript_required": true,
+          "metadata": {
+            "accepted_response_source": "transcription"
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "ventilation_started",
+          "trigger": "action",
+          "target_state": "ventilation_started_state",
+          "action_id": "start_ventilation",
+          "expected_response": "yes"
+        },
+        {
+          "id": "ventilation_audio_started",
+          "trigger": "action",
+          "target_state": "ventilation_started_state",
+          "action_id": "verbalize_ventilation",
+          "transcript_match": "ventilation"
+        },
+        {
+          "id": "instructor_start_ventilation",
+          "trigger": "instructor",
+          "target_state": "ventilation_started_state",
+          "instructor_event": "ventilation_started"
+        }
+      ]
+    },
+    {
+      "id": "ventilation_started_state",
+      "name": "Ventilation Started",
+      "description": "Ventilation has been started and the student must apply the pulse oximeter before ventilation is in progress.",
+      "actions": [
+        {
+          "id": "apply_pulse_oximeter",
+          "type": "yes_no",
+          "prompt": "Did you apply the pulse oximeter?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "monitoring"
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "pulse_oximeter_applied",
+          "trigger": "action",
+          "target_state": "ventilation_in_progress",
+          "action_id": "apply_pulse_oximeter",
+          "expected_response": "yes"
+        },
+        {
+          "id": "instructor_pulse_oximeter_applied",
+          "trigger": "instructor",
+          "target_state": "ventilation_in_progress",
+          "instructor_event": "pulse_oximeter_applied"
+        }
+      ]
+    },
+    {
+      "id": "ventilation_in_progress",
+      "name": "Ventilation In Progress",
+      "description": "Ventilation is underway and the ventilation timer is active.",
+      "actions": [
+        {
+          "id": "confirm_effective_ventilation",
+          "type": "yes_no",
+          "prompt": "Is ventilation effective?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "assessment": "ventilation_effectiveness"
+          }
+        }
+      ],
+      "timers": [
+        {
+          "id": "ventilation_timer",
+          "duration_seconds": 30,
+          "event": "ventilation_timer_elapsed",
+          "auto_start": true,
+          "metadata": {
+            "label": "Ventilation timer"
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "ventilation_effective",
+          "trigger": "action",
+          "target_state": "spo2_assessment",
+          "action_id": "confirm_effective_ventilation",
+          "expected_response": "yes"
+        },
+        {
+          "id": "ventilation_not_effective",
+          "trigger": "action",
+          "target_state": "ventilation_corrective_steps",
+          "action_id": "confirm_effective_ventilation",
+          "expected_response": "no"
+        },
+        {
+          "id": "ventilation_timer_done",
+          "trigger": "timer",
+          "target_state": "heart_rate_after_ventilation",
+          "timer_id": "ventilation_timer"
+        },
+        {
+          "id": "instructor_ventilation_complete",
+          "trigger": "instructor",
+          "target_state": "heart_rate_after_ventilation",
+          "instructor_event": "ventilation_timer_complete"
+        }
+      ]
+    },
+    {
+      "id": "ventilation_corrective_steps",
+      "name": "Ventilation Corrective Steps",
+      "description": "Student performs corrective steps when ventilation is not effective.",
+      "actions": [
+        {
+          "id": "reposition_mask",
+          "type": "yes_no",
+          "prompt": "Did you reposition the mask?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "ventilation_correction"
+          }
+        },
+        {
+          "id": "open_airway",
+          "type": "yes_no",
+          "prompt": "Did you open the airway?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "ventilation_correction"
+          }
+        },
+        {
+          "id": "suction_if_obstructed",
+          "type": "yes_no",
+          "prompt": "Did you suction if obstructed?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "ventilation_correction"
+          }
+        },
+        {
+          "id": "increase_pressure",
+          "type": "yes_no",
+          "prompt": "Did you increase pressure?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "ventilation_correction"
+          }
+        },
+        {
+          "id": "consider_alternative_airway",
+          "type": "yes_no",
+          "prompt": "Did you consider an alternative airway?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "ventilation_correction"
+          }
+        }
+      ],
+      "timers": [
+        {
+          "id": "corrective_ventilation_timer",
+          "duration_seconds": 30,
+          "event": "corrective_ventilation_timer_elapsed",
+          "auto_start": true,
+          "metadata": {
+            "label": "Corrective ventilation timer"
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "reposition_mask_done",
+          "trigger": "action",
+          "target_state": "ventilation_corrective_steps",
+          "action_id": "reposition_mask",
+          "expected_response": "yes"
+        },
+        {
+          "id": "open_airway_done",
+          "trigger": "action",
+          "target_state": "ventilation_corrective_steps",
+          "action_id": "open_airway",
+          "expected_response": "yes"
+        },
+        {
+          "id": "suction_if_obstructed_done",
+          "trigger": "action",
+          "target_state": "ventilation_corrective_steps",
+          "action_id": "suction_if_obstructed",
+          "expected_response": "yes"
+        },
+        {
+          "id": "increase_pressure_done",
+          "trigger": "action",
+          "target_state": "ventilation_corrective_steps",
+          "action_id": "increase_pressure",
+          "expected_response": "yes"
+        },
+        {
+          "id": "alternative_airway_considered",
+          "trigger": "action",
+          "target_state": "ventilation_corrective_steps",
+          "action_id": "consider_alternative_airway",
+          "expected_response": "yes"
+        },
+        {
+          "id": "corrective_ventilation_timer_done",
+          "trigger": "timer",
+          "target_state": "heart_rate_after_ventilation",
+          "timer_id": "corrective_ventilation_timer"
+        },
+        {
+          "id": "instructor_corrective_ventilation_complete",
+          "trigger": "instructor",
+          "target_state": "heart_rate_after_ventilation",
+          "instructor_event": "corrective_ventilation_complete"
+        }
+      ]
+    },
+    {
+      "id": "heart_rate_after_ventilation",
+      "name": "Heart Rate After Ventilation",
+      "description": "Student reassesses heart rate after ventilation.",
+      "actions": [
+        {
+          "id": "post_ventilation_heart_rate",
+          "type": "text",
+          "prompt": "Enter post-ventilation heart rate category: under_60, under_100, or 100_or_more.",
+          "metadata": {
+            "response_format": "category"
+          }
+        }
+      ],
+      "timers": [
+        {
+          "id": "heart_rate_reassessment_timer",
+          "duration_seconds": 15,
+          "event": "heart_rate_reassessment_timer_elapsed",
+          "auto_start": true,
+          "metadata": {
+            "label": "Heart rate reassessment timer"
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "post_vent_hr_under_60",
+          "trigger": "action",
+          "target_state": "advanced_resuscitation",
+          "action_id": "post_ventilation_heart_rate",
+          "expected_response": "under_60"
+        },
+        {
+          "id": "post_vent_hr_under_100",
+          "trigger": "action",
+          "target_state": "heart_rate_increasing",
+          "action_id": "post_ventilation_heart_rate",
+          "expected_response": "under_100"
+        },
+        {
+          "id": "post_vent_hr_100_or_more",
+          "trigger": "action",
+          "target_state": "heart_rate_increasing",
+          "action_id": "post_ventilation_heart_rate",
+          "expected_response": "100_or_more"
+        },
+        {
+          "id": "heart_rate_reassessment_timer_done",
+          "trigger": "timer",
+          "target_state": "heart_rate_increasing",
+          "timer_id": "heart_rate_reassessment_timer"
+        },
+        {
+          "id": "instructor_post_vent_hr_under_60",
+          "trigger": "instructor",
+          "target_state": "advanced_resuscitation",
+          "instructor_event": "heart_rate_under_60"
+        },
+        {
+          "id": "instructor_post_vent_hr_100_or_more",
+          "trigger": "instructor",
+          "target_state": "heart_rate_increasing",
+          "instructor_event": "heart_rate_100_or_more"
+        }
+      ]
+    },
+    {
+      "id": "heart_rate_increasing",
+      "name": "Is Heart Rate Increasing?",
+      "description": "Student determines whether the heart rate is increasing after ventilation.",
+      "actions": [
+        {
+          "id": "heart_rate_increasing",
+          "type": "yes_no",
+          "prompt": "Is the heart rate increasing?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "assessment": "heart_rate_trend"
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "heart_rate_increasing_yes",
+          "trigger": "action",
+          "target_state": "continue_ventilation_15s",
+          "action_id": "heart_rate_increasing",
+          "expected_response": "yes"
+        },
+        {
+          "id": "heart_rate_increasing_no",
+          "trigger": "action",
+          "target_state": "ventilation_corrective_steps",
+          "action_id": "heart_rate_increasing",
+          "expected_response": "no"
+        },
+        {
+          "id": "instructor_heart_rate_increasing",
+          "trigger": "instructor",
+          "target_state": "continue_ventilation_15s",
+          "instructor_event": "heart_rate_increasing"
+        },
+        {
+          "id": "instructor_heart_rate_not_increasing",
+          "trigger": "instructor",
+          "target_state": "ventilation_corrective_steps",
+          "instructor_event": "heart_rate_not_increasing"
+        }
+      ]
+    },
+    {
+      "id": "continue_ventilation_15s",
+      "name": "Continue Ventilation For 15 Seconds",
+      "description": "Student continues ventilation briefly before routine observation.",
+      "actions": [
+        {
+          "id": "continue_ventilation",
+          "type": "yes_no",
+          "prompt": "Continue ventilation for 15 seconds?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "ventilation"
+          }
+        }
+      ],
+      "timers": [
+        {
+          "id": "continue_ventilation_timer",
+          "duration_seconds": 15,
+          "event": "continue_ventilation_timer_elapsed",
+          "auto_start": true,
+          "metadata": {
+            "label": "Continue ventilation timer"
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "continue_ventilation_confirmed",
+          "trigger": "action",
+          "target_state": "continue_ventilation_15s",
+          "action_id": "continue_ventilation",
+          "expected_response": "yes"
+        },
+        {
+          "id": "continue_ventilation_timer_done",
+          "trigger": "timer",
+          "target_state": "routine_observation",
+          "timer_id": "continue_ventilation_timer"
+        },
+        {
+          "id": "instructor_continue_ventilation_complete",
+          "trigger": "instructor",
+          "target_state": "routine_observation",
+          "instructor_event": "continue_ventilation_complete"
+        }
+      ]
+    },
+    {
+      "id": "spo2_assessment",
+      "name": "SpO2 Assessment",
+      "description": "Student assesses oxygen saturation and decides whether to continue monitoring or escalate.",
+      "actions": [
+        {
+          "id": "spo2_category",
+          "type": "text",
+          "prompt": "Enter SpO2 category: acceptable or low.",
+          "metadata": {
+            "response_format": "category"
+          }
+        },
+        {
+          "id": "announce_spo2",
+          "type": "audio",
+          "prompt": "Announce the SpO2 assessment.",
+          "transcript_required": true,
+          "metadata": {
+            "accepted_response_source": "transcription"
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "spo2_acceptable",
+          "trigger": "action",
+          "target_state": "routine_observation",
+          "action_id": "spo2_category",
+          "expected_response": "acceptable"
+        },
+        {
+          "id": "spo2_low",
+          "trigger": "action",
+          "target_state": "advanced_resuscitation",
+          "action_id": "spo2_category",
+          "expected_response": "low"
+        },
+        {
+          "id": "audio_spo2_low",
+          "trigger": "action",
+          "target_state": "advanced_resuscitation",
+          "action_id": "announce_spo2",
+          "transcript_match": "low"
+        },
+        {
+          "id": "instructor_spo2_low",
+          "trigger": "instructor",
+          "target_state": "advanced_resuscitation",
+          "instructor_event": "spo2_low"
+        },
+        {
+          "id": "instructor_spo2_acceptable",
+          "trigger": "instructor",
+          "target_state": "routine_observation",
+          "instructor_event": "spo2_acceptable"
+        }
+      ]
+    },
+    {
+      "id": "routine_observation",
+      "name": "Routine Observation",
+      "description": "Baby remains with mother while the team continues observation.",
+      "actions": [
+        {
+          "id": "continue_observation",
+          "type": "yes_no",
+          "prompt": "Continue routine observation?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "terminal_path": true
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "routine_observation_continues",
+          "trigger": "action",
+          "target_state": "simulation_complete",
+          "action_id": "continue_observation",
+          "expected_response": "yes"
+        },
+        {
+          "id": "instructor_escalates_from_routine",
+          "trigger": "instructor",
+          "target_state": "advanced_resuscitation",
+          "instructor_event": "escalate_to_advanced_resuscitation"
+        }
+      ]
+    },
+    {
+      "id": "simulation_complete",
+      "name": "Simulation Complete",
+      "description": "Terminal stop state for the professor revised flow.",
+      "actions": [],
+      "timers": [],
+      "transitions": [],
+      "metadata": {
+        "terminal": true,
+        "outcome": "stop"
+      }
+    },
+    {
+      "id": "advanced_resuscitation",
+      "name": "Advanced Resuscitation",
+      "description": "Scenario transitions into the advanced resuscitation workflow.",
+      "actions": [
+        {
+          "id": "acknowledge_advanced_resuscitation",
+          "type": "yes_no",
+          "prompt": "Acknowledge transition into advanced resuscitation?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "terminal_path": true
+          }
+        },
+        {
+          "id": "start_chest_compressions",
+          "type": "yes_no",
+          "prompt": "Did you start chest compressions?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "advanced_resuscitation"
+          }
+        },
+        {
+          "id": "prepare_epinephrine",
+          "type": "yes_no",
+          "prompt": "Did you prepare epinephrine?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "advanced_resuscitation"
+          }
+        },
+        {
+          "id": "establish_vascular_access",
+          "type": "yes_no",
+          "prompt": "Did you establish vascular access?",
+          "options": [
+            "yes",
+            "no"
+          ],
+          "metadata": {
+            "intervention": "advanced_resuscitation"
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "advanced_resuscitation_acknowledged",
+          "trigger": "action",
+          "target_state": "advanced_resuscitation",
+          "action_id": "acknowledge_advanced_resuscitation",
+          "expected_response": "yes"
+        },
+        {
+          "id": "chest_compressions_started",
+          "trigger": "action",
+          "target_state": "advanced_resuscitation",
+          "action_id": "start_chest_compressions",
+          "expected_response": "yes"
+        },
+        {
+          "id": "epinephrine_prepared",
+          "trigger": "action",
+          "target_state": "advanced_resuscitation",
+          "action_id": "prepare_epinephrine",
+          "expected_response": "yes"
+        },
+        {
+          "id": "vascular_access_established",
+          "trigger": "action",
+          "target_state": "advanced_resuscitation",
+          "action_id": "establish_vascular_access",
+          "expected_response": "yes"
+        },
+        {
+          "id": "instructor_hold_advanced_resuscitation",
+          "trigger": "instructor",
+          "target_state": "advanced_resuscitation",
+          "instructor_event": "hold_advanced_resuscitation"
+        },
+        {
+          "id": "advanced_resuscitation_complete",
+          "trigger": "instructor",
+          "target_state": "simulation_complete",
+          "instructor_event": "advanced_resuscitation_complete"
+        }
+      ]
+    }
+  ]
+}
