@@ -37,3 +37,6 @@ idna==3.18
 h11==0.16.0
 click==8.4.1
 colorama==0.4.6
+
+# PDF generation
+reportlab==4.2.2

@@ -1,4 +1,4 @@
-import type { ActiveSessionItem, ScenarioListItem, SessionMetrics, SessionResponse, SessionStateResponse } from "../types";
+import type { ActiveSessionItem, ReplayResponse, ScenarioListItem, SessionMetrics, SessionResponse, SessionStateResponse } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -76,6 +76,23 @@ export async function sendInstructorEvent(
 
 export async function getSessionMetrics(sessionId: string): Promise<SessionMetrics> {
   return request<SessionMetrics>(`/api/sessions/sessions/${sessionId}/metrics`);
+}
+
+export async function getSessionReplay(sessionId: string): Promise<ReplayResponse> {
+  return request<ReplayResponse>(`/api/sessions/sessions/${sessionId}/replay`);
+}
+
+export async function downloadSessionPdf(sessionId: string): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/sessions/sessions/${sessionId}/report/pdf`
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `PDF report failed with ${response.status}`);
+  }
+
+  return response.blob();
 }
 
 export async function downloadSessionCsv(sessionId: string): Promise<Blob> {

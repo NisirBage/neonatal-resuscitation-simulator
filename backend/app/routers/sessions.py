@@ -104,6 +104,22 @@ class SessionMetricsResponse(BaseModel):
     completion_status: str
 
 
+class ReplayEventItem(BaseModel):
+    id: str
+    type: str
+    timestamp: str
+    state_id: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    transition_id: str | None = None
+    target_state_id: str | None = None
+
+
+class ReplayResponse(BaseModel):
+    session_id: UUID
+    event_count: int
+    events: list[ReplayEventItem]
+
+
 @router.post("/sessions/start", response_model=SessionResponse)
 async def start_session(request: StartSessionRequest) -> SessionResponse:
     scenario = _load_scenario_by_id(request.scenario_id)
@@ -173,6 +189,57 @@ async def get_session_metrics(session_id: UUID) -> SessionMetricsResponse:
         current_state_id=record.engine.get_current_state().id,
     )
     return SessionMetricsResponse(session_id=session_id, **metrics)
+
+
+@router.get("/sessions/{session_id}/replay", response_model=ReplayResponse)
+async def get_session_replay(session_id: UUID) -> ReplayResponse:
+    try:
+        record = _get_active_record(session_id)
+    except KeyError as exc:
+        raise _not_found(session_id) from exc
+
+    history = record.engine.get_history()
+    events = [
+        ReplayEventItem(
+            id=str(event.id),
+            type=event.type,
+            timestamp=event.timestamp.isoformat(),
+            state_id=event.state_id,
+            payload=event.payload,
+            transition_id=event.transition_id,
+            target_state_id=event.target_state_id,
+        )
+        for event in history
+    ]
+    return ReplayResponse(
+        session_id=session_id,
+        event_count=len(events),
+        events=events,
+    )
+
+
+@router.get("/sessions/{session_id}/report/pdf")
+async def get_session_pdf_report(session_id: UUID) -> Response:
+    try:
+        record = _get_active_record(session_id)
+    except KeyError as exc:
+        raise _not_found(session_id) from exc
+
+    from app.services.report_service import generate_session_pdf
+    pdf_bytes = generate_session_pdf(
+        session_id=str(session_id),
+        scenario_id=record.scenario.id,
+        scenario_name=record.scenario.name,
+        history=record.engine.get_history(),
+        current_state_id=record.engine.get_current_state().id,
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="session_{session_id}_report.pdf"',
+        },
+    )
 
 
 @router.post("/sessions/{session_id}/input", response_model=SessionResponse)

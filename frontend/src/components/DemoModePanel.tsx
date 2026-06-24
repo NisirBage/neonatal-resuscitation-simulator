@@ -10,7 +10,10 @@ interface DemoModePanelProps {
   activeTimer: ActiveTimerView | null;
   lastEventType: string | null;
   exportingCsv: boolean;
+  downloadingPdf: boolean;
   onExportCsv: () => void;
+  onDownloadPdf: () => void;
+  onViewReplay: () => void;
 }
 
 export function DemoModePanel({
@@ -20,7 +23,10 @@ export function DemoModePanel({
   activeTimer,
   lastEventType,
   exportingCsv,
-  onExportCsv
+  downloadingPdf,
+  onExportCsv,
+  onDownloadPdf,
+  onViewReplay,
 }: DemoModePanelProps) {
   return (
     <section className="rounded-lg border border-clinical-green/30 bg-teal-50/40 p-5 shadow-soft">
@@ -33,7 +39,23 @@ export function DemoModePanel({
             onClick={onExportCsv}
             type="button"
           >
-            {exportingCsv ? "Exporting..." : "Export Session CSV"}
+            {exportingCsv ? "Exporting…" : "Export CSV"}
+          </button>
+          <button
+            className="rounded-md border border-clinical-line bg-white px-3 py-1.5 text-sm font-semibold text-clinical-ink transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!sessionId || downloadingPdf}
+            onClick={onDownloadPdf}
+            type="button"
+          >
+            {downloadingPdf ? "Generating…" : "Download PDF Report"}
+          </button>
+          <button
+            className="rounded-md border border-clinical-line bg-white px-3 py-1.5 text-sm font-semibold text-clinical-ink transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!sessionId}
+            onClick={onViewReplay}
+            type="button"
+          >
+            View Replay
           </button>
           <ConnectionStatusBadge websocketStatus={websocketStatus} />
         </div>

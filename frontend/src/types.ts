@@ -75,6 +75,22 @@ export interface SessionMetrics {
   completion_status: string;
 }
 
+export interface ReplayEvent {
+  id: string;
+  type: string;
+  timestamp: string;
+  state_id: string;
+  payload: Record<string, unknown>;
+  transition_id: string | null;
+  target_state_id: string | null;
+}
+
+export interface ReplayResponse {
+  session_id: string;
+  event_count: number;
+  events: ReplayEvent[];
+}
+
 export interface RuntimeEvent {
   type: string;
   event_id?: string;

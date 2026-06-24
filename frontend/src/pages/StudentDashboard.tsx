@@ -5,12 +5,14 @@ import { DemoModePanel } from "../components/DemoModePanel";
 import { EventPanel } from "../components/EventPanel";
 import { PerformanceReport } from "../components/PerformanceReport";
 import { ProgressPanel } from "../components/ProgressPanel";
+import { SessionReplay } from "../components/SessionReplay";
 import { StateCard } from "../components/StateCard";
 import { useTimerCountdown } from "../hooks/useTimerCountdown";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
 import {
   downloadSessionCsv,
+  downloadSessionPdf,
   getSession,
   getSessionMetrics,
   listScenarios,
@@ -77,6 +79,8 @@ export function StudentDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [showReplay, setShowReplay] = useState(false);
   const [metrics, setMetrics] = useState<SessionMetrics | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
@@ -139,6 +143,11 @@ export function StudentDashboard() {
       .then(setMetrics)
       .catch(() => setMetrics(null));
   }, [currentState?.id, sessionId]);
+
+  // Close replay when session changes
+  useEffect(() => {
+    setShowReplay(false);
+  }, [sessionId]);
 
   useEffect(() => {
     return () => {
@@ -305,6 +314,37 @@ export function StudentDashboard() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!sessionId) {
+      setError("Start a session before downloading the PDF report.");
+      return;
+    }
+
+    setDownloadingPdf(true);
+    setError(null);
+
+    try {
+      const blob = await downloadSessionPdf(sessionId);
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = `session_${sessionId}_report.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(downloadUrl);
+      addEvent({
+        type: "ui.session_pdf_downloaded",
+        timestamp: new Date().toISOString(),
+        payload: { session_id: sessionId }
+      });
+    } catch (pdfError: unknown) {
+      setError(
+        pdfError instanceof Error ? pdfError.message : "Unable to download PDF report."
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   const handleTriggerTimer = async (timerId: string) => {
     if (!sessionId) {
       setError("Start a session before triggering a timer.");
@@ -390,6 +430,12 @@ export function StudentDashboard() {
             websocketStatus={websocketStatus}
           />
           {metrics ? <PerformanceReport metrics={metrics} /> : null}
+          {showReplay && sessionId ? (
+            <SessionReplay
+              sessionId={sessionId}
+              onClose={() => setShowReplay(false)}
+            />
+          ) : null}
           <ActionPanel
             busy={busy}
             currentState={currentState}
@@ -414,9 +460,12 @@ export function StudentDashboard() {
           <DemoModePanel
             activeTimer={activeTimer}
             currentState={currentState}
+            downloadingPdf={downloadingPdf}
             exportingCsv={exportingCsv}
             lastEventType={lastEventType}
+            onDownloadPdf={() => void handleDownloadPdf()}
             onExportCsv={() => void handleExportCsv()}
+            onViewReplay={() => setShowReplay((v) => !v)}
             sessionId={sessionId}
             websocketStatus={websocketStatus}
           />
