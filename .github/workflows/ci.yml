@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ── 1. Backend unit tests ──────────────────────────────────────────────────
+  backend-tests:
+    name: Backend Tests (Python 3.10)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    # Provide all required settings fields so config.py initialises cleanly.
+    env:
+      DATABASE_URL: sqlite+aiosqlite:///./test.db
+      JWT_SECRET_KEY: ci-test-secret-not-for-production
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+      ALLOWED_ORIGINS: '["http://localhost:5173"]'
+      # Resolve the scenario directory relative to the checked-out repo root.
+      SCENARIOS_DIR: ${{ github.workspace }}/scenarios
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install runtime dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install test dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
+
+  # ── 2. TypeScript type check ───────────────────────────────────────────────
+  typescript-check:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript strict type check
+        run: npx tsc --noEmit
+
+  # ── 3. Backend Docker image build ─────────────────────────────────────────
+  #    Runs after backend-tests pass. Validates the production Dockerfile
+  #    compiles and the image can be created without errors.
+  backend-docker-build:
+    name: Backend Docker Build
+    runs-on: ubuntu-latest
+    needs: backend-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: false
+          tags: nrs-backend:ci
+          # GitHub Actions cache keeps subsequent builds fast.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 4. Frontend Docker image build ────────────────────────────────────────
+  #    Validates the multi-stage frontend Dockerfile (node build + nginx serve).
+  frontend-docker-build:
+    name: Frontend Docker Build
+    runs-on: ubuntu-latest
+    needs: typescript-check
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: false
+          tags: nrs-frontend:ci
+          build-args: |
+            VITE_API_BASE_URL=https://ci-placeholder.railway.app
+            VITE_WS_BASE_URL=wss://ci-placeholder.railway.app
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 5. Frontend production build ───────────────────────────────────────────
+  #    Runs after the TypeScript check passes. Uses placeholder backend URLs
+  #    so the build does not depend on a live deployment.
+  frontend-build:
+    name: Frontend Production Build
+    runs-on: ubuntu-latest
+    needs: typescript-check
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    env:
+      # Placeholder production URLs baked into the bundle for CI.
+      # Real URLs are set in the Vercel project dashboard for actual deployments.
+      VITE_API_BASE_URL: https://ci-placeholder.railway.app
+      VITE_WS_BASE_URL: wss://ci-placeholder.railway.app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 7

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from threading import RLock
 from typing import Any, Literal
@@ -11,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.events import EventBus, EventEnvelope
 from app.scenario_runner import ScenarioRunner
 from app.session_service import SessionManager
+
+logger = logging.getLogger(__name__)
 
 
 ConnectionRole = Literal["student", "instructor"]
@@ -90,6 +93,7 @@ class WebSocketManager:
         with self._lock:
             session_id = self._connection_index.pop(connection_id, None)
             if session_id is None:
+                logger.debug("[WS_MGR] disconnect called for unknown conn=%s (already removed)", connection_id)
                 return False
 
             room = self._rooms.get(session_id)
@@ -105,6 +109,7 @@ class WebSocketManager:
             if should_cleanup:
                 self._rooms.pop(session_id, None)
 
+        logger.info("[WS_MGR] disconnecting conn=%s session=%s", connection_id, session_id)
         if connection is not None:
             await self._close_websocket(connection.websocket)
 
@@ -156,7 +161,12 @@ class WebSocketManager:
         try:
             await connection.websocket.send_json(message)
             return True
-        except (RuntimeError, WebSocketDisconnect):
+        except (RuntimeError, WebSocketDisconnect) as exc:
+            logger.warning("[WS_MGR] send_personal_message failed conn=%s exc=%r — disconnecting", connection_id, exc)
+            await self.disconnect(connection_id)
+            return False
+        except Exception:
+            logger.exception("[WS_MGR] send_personal_message unexpected error conn=%s — disconnecting", connection_id)
             await self.disconnect(connection_id)
             return False
 
@@ -240,11 +250,14 @@ class WebSocketManager:
             "metadata": event.metadata,
         }
 
-        if self._is_instructor_only_event(event.event_type):
-            await self.broadcast_to_instructors(event.session_id, message)
-            return
+        try:
+            if self._is_instructor_only_event(event.event_type):
+                await self.broadcast_to_instructors(event.session_id, message)
+                return
 
-        await self.broadcast_to_session(event.session_id, message)
+            await self.broadcast_to_session(event.session_id, message)
+        except Exception:
+            logger.exception("[WS_MGR] _handle_event failed event_type=%s session=%s", event.event_type, event.session_id)
 
     def _is_instructor_only_event(self, event_type: str) -> bool:
         return event_type.startswith("analytics.")
@@ -273,14 +286,23 @@ class WebSocketManager:
         for connection in connections:
             try:
                 await connection.websocket.send_json(message)
-            except (RuntimeError, WebSocketDisconnect):
+            except (RuntimeError, WebSocketDisconnect) as exc:
+                logger.warning("[WS_MGR] send failed conn=%s exc=%r — queuing disconnect", connection.connection_id, exc)
+                disconnected.append(connection.connection_id)
+            except Exception:
+                logger.exception("[WS_MGR] send unexpected error conn=%s — queuing disconnect", connection.connection_id)
                 disconnected.append(connection.connection_id)
 
         for connection_id in disconnected:
             await self.disconnect(connection_id)
 
     async def _close_websocket(self, websocket: WebSocket) -> None:
+        logger.info("[WS_MGR] closing websocket state=%s", getattr(websocket, 'client_state', '?'))
         try:
             await websocket.close()
-        except (RuntimeError, WebSocketDisconnect):
+        except (RuntimeError, WebSocketDisconnect) as exc:
+            logger.debug("[WS_MGR] close raised (expected if already closed): %r", exc)
+            return
+        except Exception:
+            logger.exception("[WS_MGR] close raised unexpected error")
             return

@@ -40,3 +40,6 @@ colorama==0.4.6
 
 # PDF generation
 reportlab==4.2.2
+
+# Excel export
+openpyxl==3.1.5

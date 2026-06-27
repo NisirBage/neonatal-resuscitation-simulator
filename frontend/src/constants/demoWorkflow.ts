@@ -4,17 +4,15 @@ export interface WorkflowStep {
 }
 
 export const PROFESSOR_WORKFLOW_STEPS: WorkflowStep[] = [
-  { label: "Baby Born", stateIds: ["baby_born"] },
-  { label: "Chest Placement", stateIds: ["put_on_mothers_chest"] },
-  { label: "Initial Steps", stateIds: ["initial_steps"] },
-  { label: "Crying Assessment", stateIds: ["crying_assessment"] },
-  { label: "Apnea Assessment", stateIds: ["apnea_assessment"] },
-  { label: "Heart Rate Assessment", stateIds: ["heart_rate_assessment"] },
+  { label: "Baby Born",       stateIds: ["baby_born"] },
+  { label: "Positioning",     stateIds: ["put_on_mothers_chest"] },
+  { label: "Crying?",         stateIds: ["crying_assessment"] },
+  { label: "Apnea?",          stateIds: ["apnea_assessment"] },
+  { label: "Heart Rate",      stateIds: ["heart_rate_assessment"] },
   {
     label: "Ventilation",
     stateIds: [
       "ventilation_path",
-      "ventilation_started_state",
       "ventilation_in_progress",
       "ventilation_corrective_steps"
     ]
@@ -23,24 +21,16 @@ export const PROFESSOR_WORKFLOW_STEPS: WorkflowStep[] = [
     label: "Reassessment",
     stateIds: [
       "heart_rate_after_ventilation",
-      "heart_rate_increasing",
       "continue_ventilation_15s"
     ]
   },
-  {
-    label: "Observation",
-    stateIds: ["routine_observation", "spo2_assessment"]
-  },
-  { label: "Complete", stateIds: ["simulation_complete"] }
+  { label: "Complete",        stateIds: ["simulation_complete", "routine_care"] }
 ];
 
 export type WorkflowStepStatus = "complete" | "current" | "pending";
 
 export function getWorkflowStepIndex(stateId: string | null | undefined): number {
-  if (!stateId) {
-    return -1;
-  }
-
+  if (!stateId) return -1;
   return PROFESSOR_WORKFLOW_STEPS.findIndex((step) => step.stateIds.includes(stateId));
 }
 
@@ -49,18 +39,8 @@ export function getWorkflowStepStatus(
   currentStateId: string | null | undefined
 ): WorkflowStepStatus {
   const currentStepIndex = getWorkflowStepIndex(currentStateId);
-
-  if (currentStepIndex === -1) {
-    return "pending";
-  }
-
-  if (stepIndex < currentStepIndex) {
-    return "complete";
-  }
-
-  if (stepIndex === currentStepIndex) {
-    return "current";
-  }
-
+  if (currentStepIndex === -1) return "pending";
+  if (stepIndex < currentStepIndex) return "complete";
+  if (stepIndex === currentStepIndex) return "current";
   return "pending";
 }

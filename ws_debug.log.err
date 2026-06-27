@@ -1,0 +1,58 @@
+INFO:     Started server process [31068]
+INFO:     Waiting for application startup.
+{"timestamp": "2026-06-26T10:26:18.831314+00:00", "level": "INFO", "logger": "app.main", "message": "Starting Neonatal Resuscitation Simulator v1.0.0", "app": "Neonatal Resuscitation Simulator", "event": "startup_begin"}
+{"timestamp": "2026-06-26T10:26:18.832424+00:00", "level": "INFO", "logger": "app.main", "message": "Configuration: DEBUG=True, DB=sqlite+aiosqlite://..., SCENARIOS_DIR=C:\\Users\\BIT\\neonatal-resuscitation-simulator\\scenarios", "app": "Neonatal Resuscitation Simulator", "event": "startup_config"}
+{"timestamp": "2026-06-26T10:26:18.846525+00:00", "level": "INFO", "logger": "app.main", "message": "Database connectivity verified", "app": "Neonatal Resuscitation Simulator", "event": "db_ready"}
+{"timestamp": "2026-06-26T10:26:18.864532+00:00", "level": "ERROR", "logger": "app.main", "message": "Failed to restore session c47cc2da-6249-45ae-997f-4177835efaef: scenario state was not found", "app": "Neonatal Resuscitation Simulator", "event": "restore_session_failed"}
+{"timestamp": "2026-06-26T10:26:18.867554+00:00", "level": "ERROR", "logger": "app.main", "message": "Failed to restore session e41306af-4f65-4131-ae09-fc42d2eb2b33: scenario state was not found", "app": "Neonatal Resuscitation Simulator", "event": "restore_session_failed"}
+{"timestamp": "2026-06-26T10:26:18.868554+00:00", "level": "ERROR", "logger": "app.main", "message": "Failed to restore session 053a33fe-bb22-4bb8-85aa-3700971119cb: scenario state was not found", "app": "Neonatal Resuscitation Simulator", "event": "restore_session_failed"}
+{"timestamp": "2026-06-26T10:26:18.873554+00:00", "level": "INFO", "logger": "app.main", "message": "Restored 12 session(s) from database", "app": "Neonatal Resuscitation Simulator", "event": "sessions_restored"}
+{"timestamp": "2026-06-26T10:26:18.873554+00:00", "level": "INFO", "logger": "app.main", "message": "Application startup complete \u2014 listening for connections", "app": "Neonatal Resuscitation Simulator", "event": "startup"}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+DEBUG:    = connection is CONNECTING
+DEBUG:    < GET /api/ws/sessions/b8b40fb2-6f1f-4208-bea7-431a76932338/student HTTP/1.1
+DEBUG:    < host: 127.0.0.1:8000
+DEBUG:    < upgrade: websocket
+DEBUG:    < connection: Upgrade
+DEBUG:    < sec-websocket-key: XKD5kYmudnI4BzauX/8ObQ==
+DEBUG:    < sec-websocket-version: 13
+DEBUG:    < sec-websocket-extensions: permessage-deflate; client_max_window_bits
+DEBUG:    < user-agent: Python/3.10 websockets/16.0
+INFO:     127.0.0.1:62480 - "WebSocket /api/ws/sessions/b8b40fb2-6f1f-4208-bea7-431a76932338/student" [accepted]
+DEBUG:    > HTTP/1.1 101 Switching Protocols
+DEBUG:    > Upgrade: websocket
+DEBUG:    > Connection: Upgrade
+DEBUG:    > Sec-WebSocket-Accept: una1E6TUQxsek/q5spLrwMpjzS8=
+DEBUG:    > Sec-WebSocket-Extensions: permessage-deflate
+DEBUG:    > date: Fri, 26 Jun 2026 10:26:34 GMT
+DEBUG:    > server: uvicorn
+INFO:     connection open
+DEBUG:    = connection is OPEN
+DEBUG:    > TEXT '{"type":"connection.accepted","session_id":"b8b...df1e","role":"student"}' [154 bytes]
+DEBUG:    > TEXT '{"type":"timer.expired","event_id":"9d7144c6-2c..._chest"},"metadata":{}}' [255 bytes]
+DEBUG:    > TEXT '{"type":"fsm.state_transition","event_id":"df0d..._chest"},"metadata":{}}' [503 bytes]
+DEBUG:    > TEXT '{"type":"student.input","event_id":"084f95e1-02...ssment"},"metadata":{}}' [274 bytes]
+DEBUG:    > TEXT '{"type":"fsm.state_transition","event_id":"37ae...ssment"},"metadata":{}}' [542 bytes]
+DEBUG:    > TEXT '{"type":"student.input","event_id":"ebc6d6f2-f4...ssment"},"metadata":{}}' [271 bytes]
+DEBUG:    > TEXT '{"type":"fsm.state_transition","event_id":"5672...ssment"},"metadata":{}}' [527 bytes]
+DEBUG:    > TEXT '{"type":"student.input","event_id":"572ba412-47...ssment"},"metadata":{}}' [272 bytes]
+DEBUG:    > TEXT '{"type":"fsm.state_transition","event_id":"81f0...ssment"},"metadata":{}}' [525 bytes]
+DEBUG:    > TEXT '{"type":"student.input","event_id":"23c27da8-1a...n_path"},"metadata":{}}' [269 bytes]
+DEBUG:    > TEXT '{"type":"fsm.state_transition","event_id":"0815...n_path"},"metadata":{}}' [533 bytes]
+DEBUG:    > TEXT '{"type":"student.input","event_id":"612ef44a-3f...ogress"},"metadata":{}}' [282 bytes]
+DEBUG:    > TEXT '{"type":"fsm.state_transition","event_id":"4c8a...ogress"},"metadata":{}}' [547 bytes]
+DEBUG:    > TEXT '{"type":"timer.expired","event_id":"bc778549-e7...lation"},"metadata":{}}' [269 bytes]
+DEBUG:    > TEXT '{"type":"fsm.state_transition","event_id":"337c...lation"},"metadata":{}}' [556 bytes]
+DEBUG:    > TEXT '{"type":"student.input","event_id":"0699d83c-bb...on_15s"},"metadata":{}}' [279 bytes]
+DEBUG:    > TEXT '{"type":"fsm.state_transition","event_id":"a661...on_15s"},"metadata":{}}' [567 bytes]
+DEBUG:    > TEXT '{"type":"timer.expired","event_id":"bdd58497-7f...mplete"},"metadata":{}}' [269 bytes]
+DEBUG:    > TEXT '{"type":"fsm.state_transition","event_id":"7cb8...mplete"},"metadata":{}}' [558 bytes]
+DEBUG:    > TEXT '{"type":"session.stopped","event_id":"ca6e3e57-...unning"},"metadata":{}}' [236 bytes]
+DEBUG:    < TEXT '{"type": "ping"}' [16 bytes]
+DEBUG:    < CLOSE 1000 (OK) test complete [15 bytes]
+DEBUG:    = connection is CLOSING
+DEBUG:    > CLOSE 1000 (OK) test complete [15 bytes]
+DEBUG:    x half-closing TCP connection
+DEBUG:    = connection is CLOSED
+INFO:     connection closed

@@ -1,315 +1,526 @@
-# Neonatal Resuscitation Simulator
+<div align="center">
 
-A web-based clinical training simulator for neonatal resuscitation. An instructor controls a scenario from a dedicated console; students interact with the simulation in real time through a browser interface backed by a finite-state machine (FSM) engine.
+# 🩺 Neonatal Resuscitation Simulator
+
+**A voice-first, scenario-driven clinical training platform for neonatal resuscitation.**
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.137-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![CI](https://img.shields.io/github/actions/workflow/status/NisirBage/neonatal-resuscitation-simulator/ci.yml?label=CI&logo=github-actions&logoColor=white)](https://github.com/NisirBage/neonatal-resuscitation-simulator/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[Live Demo](#demo) · [Quick Start](#quick-start--local-development) · [API Docs](#api-reference) · [Roadmap](ROADMAP.md)
+
+</div>
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Motivation & Problem Statement](#motivation--problem-statement)
+- [Clinical Background](#clinical-background)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Feature Highlights](#feature-highlights)
+- [Voice Workflow](#voice-workflow)
+- [Instructor Dashboard](#instructor-dashboard)
+- [Session Replay](#session-replay)
+- [Metrics & Scoring](#metrics--scoring)
+- [Reporting & Export](#reporting--export)
+- [Screenshots](#screenshots)
+- [Demo](#demo)
+- [Quick Start — Local Development](#quick-start--local-development)
+- [Docker Compose](#docker-compose)
+- [Production Deployment](#production-deployment)
+- [Environment Variables](#environment-variables)
+- [API Reference](#api-reference)
+- [Project Structure](#project-structure)
+- [Testing](#testing)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
+---
+
+## Overview
+
+The Neonatal Resuscitation Simulator is a full-stack web application that enables medical educators to
+guide student clinicians through the NRP (Neonatal Resuscitation Program) protocol using real-time
+voice interaction. The student speaks their responses aloud; the system transcribes, normalises, and
+validates each answer against the protocol definition before advancing the simulation.
+
+The instructor observes the live FSM state, can override transitions, trigger timers manually, and
+export four formats of clinical report — all in the same browser session, without any additional
+software.
+
+> **Academic context:** Built as a final-year software engineering capstone project demonstrating
+> full-stack development, event sourcing, finite state machines, real-time WebSocket communication,
+> and clinical workflow design.
+
+---
+
+## Motivation & Problem Statement
+
+Clinical simulation training is a well-established method for developing procedural competency
+without risk to real patients. Existing simulation platforms are often expensive, hardware-dependent
+(requiring physical manikins), or lack structured digital record-keeping for performance review.
+
+This simulator addresses three specific gaps:
+
+1. **Accessibility** — runs entirely in a web browser; no proprietary hardware or software licences required.
+2. **Structured protocol enforcement** — the FSM engine guarantees that every step of the NRP protocol is
+   presented in order and that no transition is skipped or repeated incorrectly.
+3. **Automated reporting** — every session produces an audit-quality clinical timeline automatically,
+   eliminating the need for manual note-taking by the instructor during high-cognitive-load simulations.
+
+---
+
+## Clinical Background
+
+The **Neonatal Resuscitation Program (NRP)** is the internationally recognised standard of care for
+resuscitation of newborns. The protocol consists of a structured decision tree executed within the
+first minutes after birth:
+
+1. Confirm birth and assess initial status
+2. Provide warmth, dry, and stimulate
+3. Position and clear the airway if needed
+4. Assess breathing, tone, and heart rate
+5. Initiate positive-pressure ventilation if indicated
+6. Apply pulse oximeter; confirm effective ventilation
+7. Escalate to chest compressions and epinephrine if heart rate remains < 60 bpm
+
+This simulator models steps 1–7 as a JSON-defined finite state machine, making the clinical logic
+transparent, auditable, and easily extensible to additional scenarios.
+
+> **Disclaimer:** This is a training tool. It is not validated for clinical use and must not replace
+> formal NRP certification.
 
 ---
 
 ## Architecture
 
 ```
-browser (student)      browser (instructor)
-      │                        │
-      └──────── HTTP + WebSocket ──────────┘
-                        │
-               FastAPI (Python)
-                   uvicorn
-                        │
-               SQLite (aiosqlite)       ← session persistence
-               scenarios/*.json         ← clinical scenario definitions
+┌─────────────────────────────────────────────────────┐
+│                  Browser (Student)                   │
+│  React SPA + Web Speech API (TTS + STT)              │
+│                     │  WebSocket (wss://)             │
+└─────────────────────┼───────────────────────────────┘
+                      │
+┌─────────────────────┼───────────────────────────────┐
+│               Browser (Instructor)                   │
+│  React SPA          │  WebSocket (wss://)             │
+└─────────────────────┼───────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────┐
+│          FastAPI Backend  (Python 3.10)              │
+│                                                      │
+│  REST API /api/*   WebSocket Manager   EventBus      │
+│         └──────────────┬──────────────────┘          │
+│              ScenarioRunner + FSMEngine              │
+│         (thread-safe · serialisable · event-sourced) │
+│                        │                             │
+│      SQLAlchemy async ─┴─ SQLite / PostgreSQL        │
+└─────────────────────────────────────────────────────┘
+
+Deployment:
+  Backend  → Railway  (Docker, /health check, auto-restart)
+  Frontend → Vercel   (Vite SPA, SPA rewrite, auto-deploy)
+  CI/CD    → GitHub Actions (5-job pipeline)
 ```
 
-- **Backend:** FastAPI + SQLAlchemy + aiosqlite, Python 3.10+
-- **Frontend:** React 19 + TypeScript + Tailwind CSS, built with Vite
-- **Persistence:** SQLite by default; PostgreSQL supported via environment variable
+### Key Design Patterns
+
+| Pattern | File | Why |
+|---------|------|-----|
+| **Finite State Machine** | `backend/app/fsm.py` | All scenario logic lives in JSON; the engine enforces valid transitions with no hardcoded clinical rules |
+| **Event Sourcing** | `backend/app/models.py` | Every state change is an immutable `SimulationEvent`; replay, metrics, and all four export formats derive from this single log |
+| **Pub/Sub (EventBus)** | `backend/app/events.py` | Decouples the FSM from WebSocket broadcasting; each subscriber (broadcaster, timer scheduler, persistence) operates independently |
+| **Repository** | `backend/app/services/session_service.py` | Isolates database access; swapping SQLite for PostgreSQL requires one env var change |
+| **Exponential Backoff** | `frontend/src/services/websocket.ts` | Automatic WebSocket reconnect — `min(1000 × 2ⁿ, 30000)` ms — survives network blips without user intervention |
 
 ---
 
-## Prerequisites
+## Technology Stack
 
-| Tool | Minimum version | Check |
-|------|----------------|-------|
-| Python | 3.10 | `python --version` |
-| pip | 22+ | `pip --version` |
-| Node.js | 18 | `node --version` |
-| npm | 9 | `npm --version` |
-
-No Docker is required for local development.
-
----
-
-## Docker (recommended for demo and deployment)
-
-### Prerequisites
-
-- Docker 24+ with Compose V2 (`docker compose` — not `docker-compose`)
-
-### Quickstart
-
-```bash
-# 1. Create the env file
-cp .env.example .env
-
-# 2. Set a real secret key (required)
-# Linux/macOS:
-echo "JWT_SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex(32))')" >> .env
-# Windows PowerShell:
-# Add-Content .env "JWT_SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex(32))')"
-
-# 3. Build and start
-docker compose up --build
-```
-
-| URL | What |
-|-----|------|
-| `http://localhost:5173` | Student view |
-| `http://localhost:5173/?role=instructor` | Instructor console |
-| `http://localhost:8000/health` | Backend health check |
-| `http://localhost:8000/docs` | Interactive API docs |
-
-### Persistence
-
-SQLite data is stored in a Docker named volume (`nrs_data`) at `/app/data/neonatal.db` inside the backend container. Sessions survive container restarts and image rebuilds. Data is only deleted if you explicitly remove the volume:
-
-```bash
-docker compose down -v   # removes containers AND volume (data lost)
-docker compose down      # removes containers only (data preserved)
-```
-
-### Custom backend host/port
-
-If the backend is reachable from a different address (e.g. a remote server), set the frontend build args before building:
-
-```bash
-VITE_API_BASE_URL=http://myserver.example.com:8000 \
-VITE_WS_BASE_URL=ws://myserver.example.com:8000 \
-docker compose up --build
-```
-
-Or add them to `.env`:
-```
-VITE_API_BASE_URL=http://myserver.example.com:8000
-VITE_WS_BASE_URL=ws://myserver.example.com:8000
-```
+| Layer | Technology |
+|-------|-----------|
+| Backend language | Python 3.10 |
+| Backend framework | FastAPI 0.137 |
+| Async ORM | SQLAlchemy 2.x (async) + aiosqlite |
+| Database | SQLite (default) · PostgreSQL (via asyncpg) |
+| Frontend framework | React 18 + TypeScript 5 |
+| Build tool | Vite 5 |
+| CSS | Tailwind CSS |
+| Voice | Web Speech API (SpeechSynthesis + SpeechRecognition) |
+| Real-time | Native WebSocket (no Socket.IO) |
+| PDF generation | ReportLab |
+| Excel generation | openpyxl |
+| Containerisation | Docker + Docker Compose |
+| Backend deployment | Railway (Docker builder, auto-deploy) |
+| Frontend deployment | Vercel (Vite, SPA rewrite) |
+| CI/CD | GitHub Actions |
+| Testing | pytest + Starlette TestClient (httpx) |
 
 ---
 
-## Backend Setup
+## Feature Highlights
 
-### 1. Create and activate a virtual environment
+### Student View
+- **Voice-first workflow** — simulator speaks each NRP prompt; student answers aloud
+- **Continuous speech recognition** — microphone stays active; silence auto-restarts recognition
+- **Natural language normalisation** — "yeah", "yep", "sure" → yes; "nope", "no way" → no
+- **Manual YES / NO buttons** — full fallback when microphone is unavailable or denied
+- **Live birth timer** — elapsed clock from session start with per-minute voice announcements
+- **Ventilation countdown** — animated progress bar for time-critical ventilation steps
+- **Reconnecting banner** — amber status badge and auto-sync after WebSocket reconnect
+- **Friendly error messages** — contextual messages for network failures, expired sessions, server errors
+
+### Instructor Dashboard
+- **Live session list** — polls every 5 s for active sessions
+- **Real-time state display** — WebSocket-pushed FSM state with active timer
+- **Override panel** — force any instructor-defined state transition without student input
+- **Manual timer controls** — trigger any timer immediately (useful for demonstrations)
+- **Live event log** — last 40 events with type, timestamp, and payload
+- **Export controls** — one-click access to all four report formats
+
+### Infrastructure
+- **Automatic session recovery** — restores all running sessions from the database on backend restart
+- **Health endpoint** (`GET /health`) — checks database connectivity and scenario availability; HTTP 503 if degraded
+- **Version endpoint** (`GET /version`) — git commit SHA, build timestamp, Python version
+- **Structured JSON logging** — machine-readable log format throughout the backend
+- **Pre-flight startup checks** — validates scenario directory and JSON integrity before accepting traffic
+
+---
+
+## Voice Workflow
+
+```
+Backend speaks prompt ──► Browser TTS (Web Speech API SpeechSynthesis)
+                                  │
+                         Student hears prompt
+                                  │
+                    Student responds verbally ("yes" / "no")
+                                  │
+                    SpeechRecognition API transcribes
+                                  │
+                    Normalisation: "yeah" → "yes", "nope" → "no"
+                                  │
+                    POST /api/sessions/{id}/input
+                                  │
+                    FSMEngine evaluates transition
+                         ┌────────┴────────┐
+                    valid transition    invalid / no match
+                         │                    │
+                   new state saved       same state, retry
+                         │
+                  WebSocket broadcast → both views update
+                         │
+                  Backend speaks next prompt ──► loop
+```
+
+If microphone access is unavailable, the student uses the YES / NO buttons. The simulation is
+fully functional either way — voice is an enhancement, not a dependency.
+
+---
+
+## Instructor Dashboard
+
+The instructor view opens at `/?role=instructor`. It connects to the same backend over a
+separate WebSocket channel (`/api/ws/sessions/{id}/instructor`) and receives every FSM event
+in real time.
+
+Key capabilities:
+
+| Action | How |
+|--------|-----|
+| Select a session | Dropdown polled every 5 s; shows active sessions only |
+| View current FSM state | Live push from backend — no manual refresh |
+| Force a state transition | Buttons generated from `instructor_transitions` in the scenario JSON |
+| Fire a timer | Buttons generated from `timers` in the scenario JSON |
+| Download CSV | Raw event log, one row per event |
+| Download Clinical CSV | Second-by-second clinical narrative |
+| Download Clinical XLSX | Colour-coded Excel workbook |
+| Download PDF | ReportLab performance report |
+
+---
+
+## Session Replay
+
+After a session ends, the student view switches to replay mode. The full event history is
+loaded from `GET /api/sessions/{id}/replay` and rendered as a step-through timeline.
+
+Controls:
+- **← Prev** — step back one event
+- **▶ Play** — auto-advance every 1.5 s
+- **Next →** — step forward one event
+
+Each event card shows:
+- Event type (colour-coded badge)
+- Timestamp and elapsed time from session start
+- State name before and after the transition
+- Student response or instructor action (where applicable)
+
+---
+
+## Metrics & Scoring
+
+Performance metrics are computed in a single O(N) pass over the event log by `metrics_service.py`.
+
+| Metric | Description |
+|--------|-------------|
+| Training score | Percentage of protocol steps completed correctly on the first attempt |
+| Steps completed | Count of distinct FSM states reached |
+| Steps correct | Steps where the student answered correctly without an instructor override |
+| Total session time | Elapsed time from `session_start` to `session_end` event |
+| Ventilation time | Duration spent in ventilation-related states |
+| Response times | Per-step time from prompt delivery to student input |
+
+---
+
+## Reporting & Export
+
+All four formats are generated on demand from the immutable event log. No data is pre-aggregated.
+
+| Format | Endpoint | Description |
+|--------|----------|-------------|
+| PDF performance report | `GET /api/sessions/{id}/report/pdf` | ReportLab PDF: score, metrics table, full event timeline |
+| Raw event CSV | `GET /api/sessions/{id}/export/csv` | Every FSM event with timestamps and payloads (UTF-8 BOM for Excel compatibility) |
+| Clinical timeline CSV | `GET /api/sessions/{id}/export/clinical-csv` | Second-by-second, clinical language, suitable for instructor debrief |
+| Clinical timeline XLSX | `GET /api/sessions/{id}/export/clinical-xlsx` | Colour-coded Excel workbook with clinical phase column and training score |
+
+### Clinical Timeline XLSX Columns
+
+| Column | Content |
+|--------|---------|
+| Time (s) | Seconds from session start |
+| Timestamp | ISO 8601 wall-clock time |
+| Clinical Phase | NRP phase label (Initial Assessment, Airway Management, Ventilation, etc.) |
+| Event | Clinical narrative description |
+| State | FSM state ID |
+| Training Score | Filled in the summary row only |
+
+---
+
+## Screenshots
+
+> Screenshots will be added following the first public demo. See [`docs/screenshots/README.md`](docs/screenshots/README.md) for capture instructions.
+
+| View | Description |
+|------|-------------|
+| ![Student Dashboard](docs/screenshots/student-dashboard.png) | Voice prompt display, YES/NO controls, birth timer, ventilation bar |
+| ![Instructor Dashboard](docs/screenshots/instructor-dashboard.png) | Live FSM state, override panel, event log, timer controls |
+| ![Session Replay](docs/screenshots/session-replay.png) | Step-through timeline with colour-coded event badges |
+| ![Performance Metrics](docs/screenshots/performance-metrics.png) | Training score and metric breakdown |
+| ![PDF Report](docs/screenshots/pdf-report.png) | ReportLab PDF with score, metrics, and event timeline |
+| ![Clinical Timeline XLSX](docs/screenshots/clinical-xlsx.png) | Colour-coded Excel workbook |
+
+---
+
+## Demo
+
+> **Video demonstration:** A recorded walkthrough of the complete NRP simulation will be linked here following the first public demonstration.
+
+### Live Demo
+
+| URL | Description |
+|-----|-------------|
+| Production backend | Deployed on Railway — see environment setup |
+| Production frontend | Deployed on Vercel — see environment setup |
+
+### Running a Demo Locally
+
+See [`DEMO_RUNBOOK.md`](DEMO_RUNBOOK.md) for the complete demo script including:
+- Student happy path (~5 minutes)
+- Instructor override demonstration (~3 minutes)
+- Advanced resuscitation branch (~3 minutes)
+- Persistence / crash recovery demo (~2 minutes)
+- Export walkthrough (~1 minute)
+- Recovery procedures for every failure mode
+
+---
+
+## Quick Start — Local Development
+
+**Prerequisites:** Python 3.10+, Node.js 18+, Git
+
+```bash
+git clone https://github.com/NisirBage/neonatal-resuscitation-simulator.git
+cd neonatal-resuscitation-simulator
+```
+
+### Backend
 
 ```bash
 cd backend
 python -m venv .venv
 
-# Windows (PowerShell)
-.venv\Scripts\Activate.ps1
-
+# Windows
+.venv\Scripts\activate
 # macOS / Linux
 source .venv/bin/activate
-```
 
-### 2. Install dependencies
-
-```bash
 pip install -r requirements.txt
+
+# Configure environment
+cp ../.env.local.example ../.env
+# Edit .env — set JWT_SECRET_KEY to any random string
+
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### 3. Configure environment
-
-```bash
-# From the repo root
-cp .env.example backend/.env
-```
-
-Open `backend/.env` and set at minimum:
+Verify the backend is healthy:
 
 ```
-JWT_SECRET_KEY=<random string>   # run: python -c "import secrets; print(secrets.token_hex(32))"
-ALLOWED_ORIGINS=["http://localhost:5173"]
+GET http://127.0.0.1:8000/health  →  {"status": "healthy", ...}
 ```
 
-The default `DATABASE_URL` uses SQLite and requires no further setup.
+Interactive API docs: http://127.0.0.1:8000/docs
 
-### 4. Start the backend
-
-```bash
-# Must be run from inside the backend/ directory
-cd backend
-uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-The API is available at `http://127.0.0.1:8000`.
-Interactive docs: `http://127.0.0.1:8000/docs`.
-Health check: `http://127.0.0.1:8000/health`.
-
-> **Important:** uvicorn must be started from the `backend/` directory. The SQLite
-> database file (`neonatal.db`) and the scenario path resolution both depend on this
-> working directory.
-
----
-
-## Frontend Setup
-
-### 1. Install dependencies
+### Frontend
 
 ```bash
 cd frontend
 npm install
-```
-
-### 2. Start the development server
-
-```bash
 npm run dev
 ```
 
-The frontend is available at `http://localhost:5173`.
+| URL | View |
+|-----|------|
+| http://localhost:5173 | Student Dashboard |
+| http://localhost:5173/?role=instructor | Instructor Dashboard |
 
-> The frontend connects to the backend at `http://localhost:8000` by default.
-> If your backend runs on a different address, set `VITE_API_BASE_URL` and
-> `VITE_WS_BASE_URL` before running `npm run dev` or `npm run build` (see
-> [Environment Variables](#environment-variables) below).
-
----
-
-## Interfaces
-
-### Student view
-
-Open `http://localhost:5173` in a browser. Select a scenario, start a session, and work through the clinical steps.
-
-### Instructor console
-
-Open `http://localhost:5173/?role=instructor` in a separate browser window or tab.
-
-The instructor console provides:
-- Live session selector (polls every 5 seconds)
-- Current FSM state display with all available instructor override buttons
-- Real-time event feed via WebSocket
-- Manual timer triggers
-- CSV export of the full session event log
-- Stop session control
+> **Note:** Voice recognition requires HTTPS on non-localhost origins. Local development on
+> `localhost` works without HTTPS in Chrome and Edge.
 
 ---
 
-## CSV Export
+## Docker Compose
 
-A session's complete event history can be exported to CSV at any time while the session is running.
+```bash
+# One-time setup
+cp .env.local.example .env
+# Edit .env — set JWT_SECRET_KEY to any random string
 
-**Via the instructor console:** click **Export CSV** in the header.
+# Build and start (~3 minutes on first build)
+docker compose up --build
 
-**Via the API directly:**
-```
-GET /api/sessions/sessions/{session_id}/export/csv
+# Subsequent starts
+docker compose up
 ```
 
-The CSV contains 9 columns: `timestamp`, `session_id`, `event_type`, `state_id`, `action_id`, `response`, `transition_id`, `target_state_id`, `details`.
+| URL | Description |
+|-----|-------------|
+| http://localhost:5173 | Student view |
+| http://localhost:5173/?role=instructor | Instructor view |
+| http://localhost:8000/docs | Swagger UI |
+| http://localhost:8000/health | Health check |
 
-The file is UTF-8 with BOM for Excel compatibility.
+The SQLite database is stored in a named Docker volume (`nrs_data`) and persists across
+container restarts and rebuilds. To reset: `docker compose down -v`.
 
 ---
 
-## Persistence
+## Production Deployment
 
-Sessions survive backend restarts. When the backend starts, it automatically restores all sessions that were in `running` status at shutdown or crash time.
+### Railway (Backend)
 
-- FSM state (current state, full event history) is saved to SQLite on every successful transition.
-- Self-loop transitions (e.g. warm/dry/stimulate in `initial_steps`) are also persisted.
-- Auto-start timers are recreated from their full duration on restore — elapsed time before a crash is not tracked.
-- Stopped sessions are not restored.
+1. Push the repository to GitHub.
+2. **New Project → Deploy from GitHub repo** at [railway.app](https://railway.app).
+3. Railway reads `railway.toml` automatically (Dockerfile builder, `/health` health check, restart policy).
+4. **Settings → Volumes** — attach a volume at `/app/data` for SQLite persistence across deploys.
+5. Set all required **environment variables** in the Railway dashboard (see table below).
+6. Enable **auto-deploy on push to `main`**.
+7. Copy the Railway HTTPS URL for the Vercel step.
 
-The SQLite database file is created automatically at `backend/neonatal.db` on first startup. No migration commands are needed.
+### Vercel (Frontend)
+
+1. **Import repo** at [vercel.com/new](https://vercel.com/new).
+2. Set **Root Directory** = `frontend`. Framework: Vite (auto-detected).
+3. **Environment Variables → Production:**
+   - `VITE_API_BASE_URL` = `https://your-backend.up.railway.app`
+   - `VITE_WS_BASE_URL` = `wss://your-backend.up.railway.app`
+4. Deploy, then add the Vercel URL to Railway's `ALLOWED_ORIGINS`.
+
+### GitHub Actions CI
+
+| Job | Validates |
+|-----|-----------|
+| `backend-tests` | All pytest tests pass |
+| `typescript-check` | Zero TypeScript errors |
+| `backend-docker-build` | Production Dockerfile builds |
+| `frontend-docker-build` | Multi-stage frontend Dockerfile builds |
+| `frontend-build` | Vite production bundle builds without errors |
+
+### Production Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Voice recognition not working | Requires HTTPS | Ensure the Vercel URL uses `https://` |
+| WebSocket fails | `wss://` vs `ws://` mismatch | Set `VITE_WS_BASE_URL=wss://…` (not `ws://`) |
+| CORS error in browser | `ALLOWED_ORIGINS` missing frontend URL | Add exact Vercel URL to `ALLOWED_ORIGINS` |
+| Sessions lost after restart | No Railway volume | Attach a volume at `/app/data` in Railway settings |
+| Backend health check fails on Railway | `PORT` not resolved | Do not override `PORT` — Railway injects it automatically |
+| 502 Bad Gateway (Docker) | Backend still starting | Wait ~40 s; check `docker compose logs backend` |
 
 ---
 
 ## Environment Variables
 
-### Backend (`backend/.env`)
+### Backend (`.env`)
 
-| Variable | Required | Default | Description |
+| Variable | Required | Example | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | — | SQLite: `sqlite+aiosqlite:///./neonatal.db` · PostgreSQL: `postgresql+asyncpg://user:pass@host/db` |
-| `JWT_SECRET_KEY` | Yes | — | Random secret string. Not currently enforced on routes but must be set. |
-| `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm. |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | `60` | JWT token lifetime in minutes. |
-| `DEBUG` | No | `false` | Enables FastAPI debug mode and verbose errors. Set `true` for development only. |
-| `ALLOWED_ORIGINS` | Yes | — | JSON array or comma-separated list of frontend origins. Must include the address where the frontend runs. |
-| `APP_NAME` | No | `Neonatal Resuscitation Simulator` | Application name shown in logs. |
+| `DATABASE_URL` | Yes | `sqlite+aiosqlite:////app/data/neonatal.db` | SQLite or `postgresql+asyncpg://...` |
+| `JWT_SECRET_KEY` | Yes | *(64 random hex chars)* | `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `ALLOWED_ORIGINS` | Yes | `["https://app.vercel.app"]` | JSON array of allowed CORS origins |
+| `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | `60` | Token lifetime |
+| `DEBUG` | No | `false` | Must be `false` in production |
+| `SCENARIOS_DIR` | No | `/app/scenarios` | Path to scenario JSON files |
+| `PORT` | Auto | — | Injected by Railway — **do not set manually** |
 
-### Frontend (set before `npm run build` or `npm run dev`)
+### Frontend (Vercel environment variables)
 
-| Variable | Default | Description |
+| Variable | Example | Description |
 |----------|---------|-------------|
-| `VITE_API_BASE_URL` | `http://localhost:8000` | Base URL for all REST API calls. |
-| `VITE_WS_BASE_URL` | `ws://localhost:8000` | Base URL for WebSocket connections. |
-
-> These are Vite **build-time** variables. They are baked into the compiled JS bundle.
-> Changing them after a build has no effect — rebuild the frontend after changing them.
+| `VITE_API_BASE_URL` | `https://nrs.up.railway.app` | Backend REST base URL (baked at build time) |
+| `VITE_WS_BASE_URL` | `wss://nrs.up.railway.app` | Backend WebSocket base URL (baked at build time) |
 
 ---
 
-## Scenarios
+## API Reference
 
-Scenario definitions live in `scenarios/*.json`. The backend loads them from disk on every request — no restart is needed to pick up a new or edited scenario file.
+Interactive Swagger UI is available at `GET /docs`.
 
-The active scenario is `baby_birth.json`, which models a 17-state neonatal resuscitation workflow.
+### Endpoints
 
-To add a new scenario: drop a valid JSON file into `scenarios/` and restart the backend (or just make a request — scenarios are loaded on demand).
-
----
-
-## Troubleshooting
-
-### Backend fails to start — `pydantic_settings` error or missing `.env`
-
-`backend/.env` must exist. Copy it from the example:
-```bash
-cp .env.example backend/.env
-```
-
-### Backend fails to start — `ModuleNotFoundError`
-
-The virtual environment is not activated, or dependencies were not installed:
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-### Backend fails to start — `DATABASE_URL` missing
-
-`backend/.env` must contain a `DATABASE_URL` line. The file must be read from inside `backend/` — if uvicorn is started from the repo root, it reads the root `.env` (which targets PostgreSQL and requires a running PostgreSQL server).
-
-Always start uvicorn from inside `backend/`:
-```bash
-cd backend && uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-### Frontend shows no scenarios or sessions
-
-Confirm the backend is running and `ALLOWED_ORIGINS` in `backend/.env` includes `http://localhost:5173`. CORS errors appear in the browser console.
-
-### Session list is empty after backend restart
-
-Sessions in `stopped` state are not restored — this is correct. Only `running` sessions are restored on startup.
-
-If the SQLite database file was deleted (or the backend was started from a different directory), no sessions exist to restore.
-
-### CSV export file opens with garbled characters in Excel
-
-The file is UTF-8 with BOM. Open via **Data → From Text/CSV** in Excel and select UTF-8 encoding, or use the file directly — Excel should detect the BOM automatically on Windows.
-
-### `VITE_WS_BASE_URL` not taking effect
-
-Vite environment variables are baked in at build time. After changing them, run:
-```bash
-npm run build   # for production
-# or restart dev server:
-npm run dev
-```
-
-### `warm_dry_stimulate` step lost after backend crash
-
-This was fixed — all self-loop transitions (including warm/dry/stimulate, position airway, reposition mask, chest compressions) are now persisted on every successful transition, not only on state changes.
+| Method | Path | Summary |
+|--------|------|---------|
+| `GET` | `/health` | Database + scenario health check (200 / 503) |
+| `GET` | `/version` | Build metadata: version, git commit, Python version |
+| `GET` | `/` | Root — application name and version |
+| `POST` | `/api/sessions/sessions/start` | Start a simulation session for a given scenario |
+| `GET` | `/api/sessions/sessions` | List all active sessions |
+| `GET` | `/api/sessions/sessions/{id}` | Current FSM state + full event history |
+| `POST` | `/api/sessions/sessions/{id}/input` | Submit a student YES/NO response |
+| `POST` | `/api/sessions/sessions/{id}/timer/{timer_id}` | Manually fire a named timer |
+| `POST` | `/api/sessions/sessions/{id}/instructor` | Send an instructor override event |
+| `POST` | `/api/sessions/sessions/{id}/stop` | Stop the session |
+| `GET` | `/api/sessions/sessions/{id}/metrics` | Performance metrics and training score |
+| `GET` | `/api/sessions/sessions/{id}/replay` | Full event history for replay |
+| `GET` | `/api/sessions/sessions/{id}/report/pdf` | Download PDF performance report |
+| `GET` | `/api/sessions/sessions/{id}/export/csv` | Download raw event log CSV |
+| `GET` | `/api/sessions/sessions/{id}/export/clinical-csv` | Download clinical timeline CSV |
+| `GET` | `/api/sessions/sessions/{id}/export/clinical-xlsx` | Download clinical timeline XLSX |
+| `GET` | `/api/scenarios/scenarios` | List all available scenarios |
+| `GET` | `/api/scenarios/scenarios/{id}` | Get a single scenario definition |
+| `WS` | `/api/ws/sessions/{id}/student` | Student real-time event stream |
+| `WS` | `/api/ws/sessions/{id}/instructor` | Instructor real-time event stream |
 
 ---
 
@@ -317,41 +528,151 @@ This was fixed — all self-loop transitions (including warm/dry/stimulate, posi
 
 ```
 neonatal-resuscitation-simulator/
+│
 ├── backend/
 │   ├── app/
-│   │   ├── fsm.py               FSM engine (state machine core)
-│   │   ├── scenario.py          Scenario schema and loader
-│   │   ├── scenario_runner.py   Orchestrates FSM + timers + events
-│   │   ├── session_service.py   In-memory session store
-│   │   ├── events.py            EventBus (pub/sub)
-│   │   ├── ws_manager.py        WebSocket session rooms
-│   │   ├── database.py          SQLAlchemy async engine
-│   │   ├── config.py            pydantic-settings config
-│   │   ├── main.py              FastAPI app, startup/shutdown
-│   │   ├── models/              ORM models (PersistedSession)
+│   │   ├── main.py                 # App factory, startup/shutdown, /health, /version
+│   │   ├── config.py               # Pydantic Settings (env vars, fail-fast validation)
+│   │   ├── database.py             # SQLAlchemy async engine + session factory
+│   │   ├── models.py               # ORM models (Session, SimulationEvent)
+│   │   ├── scenario.py             # Scenario schema + loader + validator
+│   │   ├── scenario_runner.py      # Session lifecycle orchestrator + timer scheduling
+│   │   ├── fsm.py                  # Finite state machine engine (thread-safe)
+│   │   ├── events.py               # Pub/sub EventBus
+│   │   ├── session_service.py      # In-memory SessionManager
+│   │   ├── ws_manager.py           # WebSocket connection manager
+│   │   ├── recovery_service.py     # Checkpoint-based session recovery
+│   │   ├── audio_service.py        # Whisper transcription (future use)
+│   │   ├── startup_validation.py   # Pre-flight scenario directory checks
 │   │   ├── routers/
-│   │   │   ├── sessions.py      Session CRUD + input endpoints
-│   │   │   ├── scenarios.py     Scenario list/validate endpoints
-│   │   │   └── ws.py            WebSocket endpoint
+│   │   │   ├── sessions.py         # All session REST + export endpoints
+│   │   │   ├── scenarios.py        # Scenario list / validate / load
+│   │   │   └── ws.py               # WebSocket endpoint
 │   │   └── services/
-│   │       ├── session_service.py   DB persistence (upsert/load/stop)
-│   │       └── export_service.py   CSV export
+│   │       ├── session_service.py  # DB persistence layer
+│   │       ├── metrics_service.py  # O(N) metrics computation
+│   │       ├── report_service.py   # ReportLab PDF generation
+│   │       ├── export_service.py   # Raw CSV export
+│   │       └── clinical_timeline_service.py  # CSV + XLSX clinical timeline
+│   ├── tests/
+│   │   ├── test_clinical_timeline_service.py   # 20 tests — CSV + XLSX generation
+│   │   └── test_infrastructure.py              # 21 tests — /health, /version, startup
+│   ├── Dockerfile                  # Multi-stage build; non-root user (uid 1001)
 │   ├── requirements.txt
-│   └── neonatal.db              Created automatically on first run
+│   └── requirements-dev.txt        # pytest, httpx
+│
 ├── frontend/
 │   ├── src/
+│   │   ├── App.tsx                 # Role-based routing (?role=instructor)
+│   │   ├── types.ts                # Shared TypeScript interfaces
 │   │   ├── pages/
 │   │   │   ├── StudentDashboard.tsx
 │   │   │   └── InstructorDashboard.tsx
-│   │   ├── components/          Shared UI components
+│   │   ├── components/
+│   │   │   ├── ConnectionStatusBadge.tsx
+│   │   │   ├── SessionReplay.tsx
+│   │   │   ├── PerformanceReport.tsx
+│   │   │   └── …
 │   │   ├── services/
-│   │   │   ├── api.ts           REST API client
-│   │   │   └── websocket.ts     WebSocket factory
-│   │   └── App.tsx              Role-based routing (?role=instructor)
-│   └── package.json
+│   │   │   ├── api.ts              # Typed REST client
+│   │   │   └── websocket.ts        # Reconnecting WebSocket (exponential backoff)
+│   │   └── hooks/
+│   │       ├── useSpeechRecognition.ts
+│   │       ├── useSpeechSynthesis.ts
+│   │       └── useTimerCountdown.ts
+│   ├── Dockerfile                  # Node build → nginx serve
+│   ├── nginx.conf
+│   └── vercel.json                 # SPA rewrite rules
+│
 ├── scenarios/
-│   └── baby_birth.json          Clinical scenario definition (17 states)
-├── terminals/                   Manual regression test scripts
-├── .env.example                 Environment variable template
-└── README.md
+│   └── baby_birth.json             # NRP voice-first scenario (17 FSM states)
+│
+├── docs/
+│   ├── index.html                  # GitHub Pages landing page
+│   ├── release-v1.0.0.md           # v1.0.0 release notes
+│   └── screenshots/                # UI screenshots (see screenshots/README.md)
+│
+├── .github/
+│   ├── workflows/ci.yml            # 5-job CI pipeline
+│   ├── ISSUE_TEMPLATE/             # Bug report + feature request templates
+│   └── PULL_REQUEST_TEMPLATE.md
+│
+├── docker-compose.yml
+├── railway.toml
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── CODE_OF_CONDUCT.md
+├── ROADMAP.md
+├── SECURITY.md
+├── DEMO_RUNBOOK.md
+├── LICENSE
+├── .env.local.example
+└── .env.production.example
 ```
+
+---
+
+## Testing
+
+### Backend (41 tests)
+
+```bash
+cd backend
+
+# Set environment variables
+export DATABASE_URL="sqlite+aiosqlite:///./test.db"
+export JWT_SECRET_KEY="test-secret-not-for-production"
+export ALLOWED_ORIGINS='["http://localhost:5173"]'
+export SCENARIOS_DIR="../scenarios"
+
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
+
+| File | Tests | Area |
+|------|-------|------|
+| `test_clinical_timeline_service.py` | 20 | CSV + XLSX clinical timeline generation, phase assignment, edge cases |
+| `test_infrastructure.py` | 21 | `/health`, `/version`, root endpoint, `run_startup_checks()` |
+| **Total** | **41** | |
+
+### Frontend
+
+```bash
+cd frontend
+npx tsc --noEmit    # 0 errors expected
+```
+
+---
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the full plan.
+
+**v1.1:** Additional NRP scenarios · Multi-language voice support · Student authentication · Session history  
+**v1.2:** Competency tracking · Instructor annotations · SCORM export · PostgreSQL default  
+**v2.0:** Whisper transcription · Branching scenarios · Mobile PWA
+
+---
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+Please note that this project has a [Code of Conduct](CODE_OF_CONDUCT.md). By participating you agree to abide by its terms.
+
+---
+
+## License
+
+Released under the **MIT License** — see [LICENSE](LICENSE).
+
+---
+
+## Acknowledgements
+
+- NRP clinical protocol guidelines (American Academy of Pediatrics / American Heart Association)
+- [FastAPI](https://fastapi.tiangolo.com/) — Sebastián Ramírez and contributors
+- [ReportLab](https://www.reportlab.com/) — PDF generation
+- [openpyxl](https://openpyxl.readthedocs.io/) — Excel generation
+- [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API) — browser-native speech recognition and synthesis
+- [Tailwind CSS](https://tailwindcss.com/) — utility-first CSS framework
+- [Contributor Covenant](https://www.contributor-covenant.org/) — Code of Conduct

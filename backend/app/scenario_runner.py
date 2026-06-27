@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from threading import RLock
 from typing import Any
@@ -10,6 +11,8 @@ from app.events import EventBus
 from app.scenario import Scenario
 from app.services.session_service import mark_session_stopped, upsert_session
 from app.session_service import SessionManager, SessionRecord
+
+logger = logging.getLogger(__name__)
 
 
 class ScenarioRunner:
@@ -46,6 +49,7 @@ class ScenarioRunner:
         )
         self._schedule_auto_start_timers(record)
         await upsert_session(record)
+        logger.info("[SESSION] started session=%s scenario=%s", record.session_id, scenario.id)
         return record
 
     async def stop_session(self, session_id: UUID) -> SessionRecord:
@@ -62,6 +66,7 @@ class ScenarioRunner:
             },
         )
         await mark_session_stopped(session_id)
+        logger.info("[SESSION] stopped session=%s", session_id)
         return record
 
     async def process_student_input(
@@ -141,8 +146,10 @@ class ScenarioRunner:
         record = self._get_active_session(session_id)
         self._ensure_running(record)
         previous_state_id = record.engine.serialize()["current_state_id"]
+        logger.info("[TIMER] fired timer=%s session=%s state=%s", timer_id, session_id, previous_state_id)
         state = record.engine.process_timer_event(timer_id)
         self._touch(record)
+        logger.info("[TIMER] processed timer=%s → state=%s", timer_id, state.current_state_id)
         await self.event_bus.publish(
             "timer.expired",
             session_id=session_id,
@@ -245,6 +252,7 @@ class ScenarioRunner:
         with self._timer_lock:
             session_tasks = self._timer_tasks.setdefault(record.session_id, {})
             for timer in auto_start_timers:
+                logger.info("[TIMER] scheduled timer=%s duration=%ds session=%s state=%s", timer.id, timer.duration_seconds, record.session_id, current_state.id)
                 session_tasks[timer.id] = asyncio.create_task(
                     self._run_auto_timer(
                         session_id=record.session_id,
@@ -270,8 +278,10 @@ class ScenarioRunner:
     ) -> None:
         try:
             await asyncio.sleep(duration_seconds)
+            logger.info("[TIMER] expiring timer=%s session=%s", timer_id, session_id)
             await self.process_timer(session_id=session_id, timer_id=timer_id)
         except asyncio.CancelledError:
+            logger.debug("[TIMER] cancelled timer=%s session=%s", timer_id, session_id)
             raise
         except (KeyError, RuntimeError):
             return

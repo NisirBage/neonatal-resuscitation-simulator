@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SpeechRecognition Native Diagnostic</title>
+<style>
+  body { font-family: monospace; background: #0a0a0a; color: #0f0; padding: 16px; font-size: 13px; }
+  h2 { color: #0ff; border-bottom: 1px solid #0ff4; padding-bottom: 4px; }
+  .ok   { color: #0f0; }
+  .err  { color: #f44; }
+  .warn { color: #fa0; }
+  .info { color: #0ff; }
+  .row  { display: flex; gap: 16px; align-items: center; margin: 4px 0; }
+  .label{ color: #888; min-width: 200px; }
+  #log  { background: #111; border: 1px solid #333; padding: 10px;
+          height: 320px; overflow-y: auto; white-space: pre-wrap; }
+  #meter{ font-size: 20px; }
+  button{ background: #003; color: #0f0; border: 1px solid #0f0;
+          padding: 6px 16px; cursor: pointer; font-family: monospace; font-size: 13px; margin: 4px; }
+  button:hover { background: #0f01; }
+</style>
+</head>
+<body>
+<h2>NRS — Native SpeechRecognition Diagnostic</h2>
+
+<div id="browserInfo"></div>
+<div id="permInfo"></div>
+<div id="deviceInfo"></div>
+<div id="contextInfo"></div>
+
+<h2>Audio Level Meter</h2>
+<div class="row">
+  <span class="label">RMS level:</span>
+  <span id="rms">—</span>
+</div>
+<div class="row">
+  <span class="label">Peak level:</span>
+  <span id="peak">—</span>
+</div>
+<div class="row">
+  <span class="label">Visual:</span>
+  <span id="meter">░░░░░░░░░░░░░░░░░░░░</span>
+</div>
+<div style="margin:8px 0">
+  <button id="btnMic">Start Mic Monitor</button>
+  <button id="btnSR">Start SpeechRecognition</button>
+  <button id="btnStop">Stop All</button>
+</div>
+
+<h2>Console Log</h2>
+<div id="log"></div>
+
+<script>
+/* ── Utilities ──────────────────────────────────────────────────────────── */
+const logEl = document.getElementById('log');
+const ts = () => new Date().toLocaleTimeString('en-US',
+  {hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+function log(msg, cls) {
+  const line = `[${ts()}] ${msg}`;
+  const div  = document.createElement('div');
+  div.textContent = line;
+  if (cls) div.className = cls;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+  // Also write to browser console so CDP can capture it
+  console.log(`[SR-DIAG ${ts()}] ${msg}`);
+}
+
+function row(parent, label, value, cls) {
+  parent.insertAdjacentHTML('beforeend',
+    `<div class="row"><span class="label">${label}</span>`+
+    `<span class="${cls||''}">${value}</span></div>`);
+}
+
+/* ── Browser / context info ─────────────────────────────────────────────── */
+(function browserInfo() {
+  const bi = document.getElementById('browserInfo');
+  const ua = navigator.userAgent;
+  const isSecure = window.isSecureContext;
+  const isLocal  = ['localhost','127.0.0.1'].includes(location.hostname);
+  const hasSR    = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const srName   = window.SpeechRecognition   ? 'SpeechRecognition'
+                 : window.webkitSpeechRecognition ? 'webkitSpeechRecognition'
+                 : 'NOT AVAILABLE';
+
+  bi.innerHTML = '<h2>Browser &amp; Context</h2>';
+  row(bi, 'Origin',             location.origin);
+  row(bi, 'Secure context',     isSecure,     isSecure ? 'ok':'err');
+  row(bi, 'Localhost',          isLocal,      isLocal  ? 'ok':'warn');
+  row(bi, 'Chrome version',     (ua.match(/Chrome\/([\d.]+)/)||['','?'])[1]);
+  row(bi, 'SpeechRecognition',  srName,       hasSR ? 'ok':'err');
+  row(bi, 'MediaDevices API',   !!navigator.mediaDevices, navigator.mediaDevices?'ok':'err');
+
+  log(`Browser: Chrome ${(ua.match(/Chrome\/([\d.]+)/)||['','?'])[1]}, secure=${isSecure}, SR=${srName}`);
+})();
+
+/* ── Microphone permission ──────────────────────────────────────────────── */
+(async function permInfo() {
+  const pi = document.getElementById('permInfo');
+  pi.innerHTML = '<h2>Microphone Permission</h2>';
+  try {
+    const status = await navigator.permissions.query({ name: 'microphone' });
+    row(pi, 'Permission state', status.state,
+        status.state === 'granted' ? 'ok' : status.state === 'denied' ? 'err' : 'warn');
+    log(`Permission: microphone = ${status.state}`, status.state === 'granted' ? 'ok' : 'warn');
+    status.onchange = () => {
+      log(`Permission changed: microphone = ${status.state}`);
+    };
+  } catch(e) {
+    row(pi, 'Permission query', `ERROR: ${e.message}`, 'err');
+    log(`Permission query failed: ${e.message}`, 'err');
+  }
+})();
+
+/* ── Device enumeration ─────────────────────────────────────────────────── */
+(async function deviceInfo() {
+  const di = document.getElementById('deviceInfo');
+  di.innerHTML = '<h2>Audio Input Devices</h2>';
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics = devices.filter(d => d.kind === 'audioinput');
+    if (mics.length === 0) {
+      row(di, 'Audio inputs', 'NONE FOUND', 'err');
+      log('No audio input devices found', 'err');
+    } else {
+      mics.forEach((d, i) => {
+        const label = d.label || '(label hidden — needs permission)';
+        row(di, `Device [${i}]`, `id=${d.deviceId.slice(0,8)}… label="${label}"`,
+            d.label ? 'ok' : 'warn');
+        log(`Device[${i}]: kind=${d.kind} label="${label}" id=${d.deviceId.slice(0,8)}`);
+      });
+    }
+  } catch(e) {
+    row(di, 'enumerateDevices', `ERROR: ${e.message}`, 'err');
+    log(`enumerateDevices failed: ${e.message}`, 'err');
+  }
+})();
+
+/* ── getUserMedia + track diagnostics ───────────────────────────────────── */
+let audioStream = null;
+let audioContext = null;
+let analyserNode = null;
+let meterTimer   = null;
+
+async function startMicMonitor() {
+  const ci = document.getElementById('contextInfo');
+  ci.innerHTML = '<h2>getUserMedia + Track Diagnostics</h2>';
+  log('Calling getUserMedia({audio:true})…');
+
+  try {
+    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const tracks = audioStream.getAudioTracks();
+
+    if (tracks.length === 0) {
+      row(ci, 'Audio tracks', 'NONE', 'err');
+      log('getUserMedia returned stream with 0 audio tracks', 'err');
+      return;
+    }
+
+    tracks.forEach((t, i) => {
+      const s = t.getSettings();
+      row(ci, `Track[${i}] label`,       t.label,                      'ok');
+      row(ci, `Track[${i}] enabled`,     t.enabled,                    t.enabled ?'ok':'err');
+      row(ci, `Track[${i}] muted`,       t.muted,                      t.muted   ?'warn':'ok');
+      row(ci, `Track[${i}] readyState`,  t.readyState,                 t.readyState==='live'?'ok':'err');
+      row(ci, `Track[${i}] sampleRate`,  s.sampleRate || '—');
+      row(ci, `Track[${i}] deviceId`,    (s.deviceId || '—').slice(0,16)+'…');
+      log(`Track[${i}]: label="${t.label}" enabled=${t.enabled} muted=${t.muted} readyState=${t.readyState} sampleRate=${s.sampleRate}`, 'ok');
+    });
+
+    /* Audio level meter */
+    audioContext = new AudioContext();
+    const source  = audioContext.createMediaStreamSource(audioStream);
+    analyserNode  = audioContext.createAnalyser();
+    analyserNode.fftSize = 256;
+    source.connect(analyserNode);
+
+    const buf = new Float32Array(analyserNode.fftSize);
+    let peakEver = 0;
+
+    meterTimer = setInterval(() => {
+      analyserNode.getFloatTimeDomainData(buf);
+      let rms = 0, peak = 0;
+      for (const v of buf) {
+        rms  += v * v;
+        peak  = Math.max(peak, Math.abs(v));
+      }
+      rms = Math.sqrt(rms / buf.length);
+      peakEver = Math.max(peakEver, peak);
+
+      const barLen = Math.round(rms * 400);
+      const bar    = '█'.repeat(Math.min(barLen, 20)) +
+                     '░'.repeat(Math.max(20 - barLen, 0));
+
+      document.getElementById('rms').textContent  = rms.toFixed(4);
+      document.getElementById('peak').textContent = `${peak.toFixed(4)}  (all-time peak: ${peakEver.toFixed(4)})`;
+      document.getElementById('meter').textContent = bar;
+    }, 100);
+
+    log('Mic monitor running — speak to see RMS change', 'info');
+  } catch(e) {
+    row(ci, 'getUserMedia', `ERROR: ${e.name}: ${e.message}`, 'err');
+    log(`getUserMedia failed: ${e.name}: ${e.message}`, 'err');
+  }
+}
+
+/* ── Standalone SpeechRecognition test ──────────────────────────────────── */
+let srInstance = null;
+
+function startSR() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { log('SpeechRecognition NOT available', 'err'); return; }
+
+  if (srInstance) { try { srInstance.abort(); } catch(_){} }
+
+  srInstance = new SR();
+  srInstance.continuous     = false;
+  srInstance.interimResults = true;
+  srInstance.lang           = 'en-US';
+  srInstance.maxAlternatives = 3;
+
+  log('─── Standalone SpeechRecognition test ───', 'info');
+  log(`SR class: ${SR.name}  continuous=false  interimResults=true  lang=en-US`, 'info');
+
+  srInstance.onstart = () => {
+    log('onstart — microphone open, sending audio to Chrome SR service', 'ok');
+  };
+  srInstance.onaudiostart = () => {
+    log('onaudiostart — audio capture has begun', 'ok');
+  };
+  srInstance.onsoundstart = () => {
+    log('onsoundstart — sound detected in audio stream', 'ok');
+  };
+  srInstance.onspeechstart = () => {
+    log('onspeechstart — speech detected (voice activity confirmed)', 'ok');
+  };
+  srInstance.onspeechend = () => {
+    log('onspeechend — speech stopped', 'warn');
+  };
+  srInstance.onsoundend = () => {
+    log('onsoundend — sound stopped', 'warn');
+  };
+  srInstance.onaudioend = () => {
+    log('onaudioend — audio capture ended', 'warn');
+  };
+
+  srInstance.onresult = (event) => {
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result     = event.results[i];
+      const transcript = result[0]?.transcript ?? '';
+      const confidence = (result[0]?.confidence ?? 0).toFixed(3);
+      const isFinal    = result.isFinal;
+
+      log(`onresult[${i}]: isFinal=${isFinal}  confidence=${confidence}  transcript="${transcript}"`,
+          isFinal ? 'ok' : 'info');
+
+      // Log all alternatives
+      for (let a = 0; a < result.length; a++) {
+        const alt = result[a];
+        if (a > 0) log(`  alt[${a}]: confidence=${(alt.confidence||0).toFixed(3)}  "${alt.transcript}"`, 'info');
+      }
+
+      if (isFinal) {
+        log(`>>> FINAL DELIVERED: "${transcript}" (isFinal=true) <<<`, 'ok');
+      } else {
+        log(`>>> INTERIM ONLY: "${transcript}" — watching for isFinal=true… <<<`, 'warn');
+      }
+    }
+  };
+
+  srInstance.onerror = (event) => {
+    log(`onerror: error="${event.error}"  message="${event.message || ''}"`,
+        event.error === 'no-speech' ? 'warn' : 'err');
+  };
+
+  srInstance.onend = () => {
+    log('onend — recognition session ended', 'warn');
+    log('─── session complete — click "Start SpeechRecognition" to test again ───', 'info');
+  };
+
+  try {
+    srInstance.start();
+    log('recognition.start() called — please speak "yes" or "no" clearly', 'info');
+  } catch(e) {
+    log(`start() threw: ${e.message}`, 'err');
+  }
+}
+
+/* ── Stop all ───────────────────────────────────────────────────────────── */
+function stopAll() {
+  if (srInstance) { try { srInstance.abort(); } catch(_){} srInstance = null; }
+  if (meterTimer)  { clearInterval(meterTimer); meterTimer = null; }
+  if (audioStream) { audioStream.getTracks().forEach(t => t.stop()); audioStream = null; }
+  if (audioContext){ audioContext.close(); audioContext = null; }
+  document.getElementById('rms').textContent   = '— (stopped)';
+  document.getElementById('peak').textContent  = '— (stopped)';
+  document.getElementById('meter').textContent = '░░░░░░░░░░░░░░░░░░░░';
+  log('All stopped.', 'warn');
+}
+
+document.getElementById('btnMic').onclick  = startMicMonitor;
+document.getElementById('btnSR').onclick   = startSR;
+document.getElementById('btnStop').onclick = stopAll;
+
+/* Auto-run browser/permission/device checks on load (already done above) */
+log('Diagnostic page loaded. Click "Start Mic Monitor" then "Start SpeechRecognition".');
+</script>
+</body>
+</html>

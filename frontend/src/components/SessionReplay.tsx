@@ -41,9 +41,13 @@ export function SessionReplay({ sessionId, onClose }: SessionReplayProps) {
     setLoading(true);
     setFetchError(null);
     getSessionReplay(sessionId)
-      .then((data) => { setReplay(data); setLoading(false); })
+      .then((data) => {
+        setReplay(data);
+        setLoading(false);
+      })
       .catch((err: unknown) => {
-        setFetchError(err instanceof Error ? err.message : "Failed to load replay.");
+        const msg = err instanceof Error ? err.message : "Failed to load replay.";
+        setFetchError(msg);
         setLoading(false);
       });
   }, [sessionId]);

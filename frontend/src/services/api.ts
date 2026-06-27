@@ -83,9 +83,8 @@ export async function getSessionReplay(sessionId: string): Promise<ReplayRespons
 }
 
 export async function downloadSessionPdf(sessionId: string): Promise<Blob> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/sessions/sessions/${sessionId}/report/pdf`
-  );
+  const url = `${API_BASE_URL}/api/sessions/sessions/${sessionId}/report/pdf`;
+  const response = await fetch(url);
 
   if (!response.ok) {
     const message = await response.text();
@@ -103,6 +102,32 @@ export async function downloadSessionCsv(sessionId: string): Promise<Blob> {
   if (!response.ok) {
     const message = await response.text();
     throw new Error(message || `CSV export failed with ${response.status}`);
+  }
+
+  return response.blob();
+}
+
+export async function downloadClinicalCsv(sessionId: string): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/sessions/sessions/${sessionId}/export/clinical-csv`
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Clinical CSV export failed with ${response.status}`);
+  }
+
+  return response.blob();
+}
+
+export async function downloadClinicalXlsx(sessionId: string): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/sessions/sessions/${sessionId}/export/clinical-xlsx`
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Excel report export failed with ${response.status}`);
   }
 
   return response.blob();

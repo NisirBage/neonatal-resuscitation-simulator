@@ -13,7 +13,7 @@ import {
   stopSession,
   triggerTimer
 } from "../services/api";
-import { createInstructorSocket } from "../services/websocket";
+import { createInstructorSocket, type WebSocketHandle } from "../services/websocket";
 import type { ActiveSessionItem, CurrentState, RuntimeEvent } from "../types";
 
 const MAX_EVENTS = 40;
@@ -30,7 +30,7 @@ export function InstructorDashboard() {
   const [exportingCsv, setExportingCsv] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const socketRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<WebSocketHandle | null>(null);
   const activeSessionIdRef = useRef("");
   const refreshSequenceRef = useRef(0);
 

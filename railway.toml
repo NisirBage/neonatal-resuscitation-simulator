@@ -1,0 +1,16 @@
+# Railway deployment configuration for the NRS backend.
+# Docs: https://docs.railway.app/reference/config-as-code
+#
+# Railway uses the repository root as the Docker build context, which matches
+# the COPY paths already inside backend/Dockerfile.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "backend/Dockerfile"
+
+[deploy]
+# PORT is injected automatically by Railway; the Dockerfile CMD reads ${PORT:-8000}.
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

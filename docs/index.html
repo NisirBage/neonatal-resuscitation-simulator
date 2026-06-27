@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neonatal Resuscitation Simulator</title>
+  <meta name="description" content="A voice-first, scenario-driven clinical training platform for neonatal resuscitation. Built with FastAPI, React, and WebSockets." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:   #2563eb;
+      --blue-d: #1d4ed8;
+      --teal:   #0d9488;
+      --gray-1: #f8fafc;
+      --gray-2: #e2e8f0;
+      --gray-7: #334155;
+      --gray-9: #0f172a;
+      --white:  #ffffff;
+      --radius: 10px;
+      --shadow: 0 4px 24px rgba(0,0,0,.10);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--gray-7);
+      background: var(--white);
+      line-height: 1.6;
+    }
+
+    /* ── Hero ──────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, #1e3a5f 0%, #0d9488 100%);
+      color: var(--white);
+      text-align: center;
+      padding: 80px 24px 64px;
+    }
+    .hero__icon { font-size: 64px; line-height: 1; margin-bottom: 16px; }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.5px; }
+    .hero p  { font-size: 1.2rem; margin: 16px auto 32px; max-width: 620px; opacity: .88; }
+
+    .btn-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: var(--radius);
+      font-weight: 600; font-size: 1rem; text-decoration: none;
+      transition: transform .15s, box-shadow .15s;
+    }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+    .btn--primary   { background: var(--white);  color: var(--blue-d); }
+    .btn--secondary { background: rgba(255,255,255,.15); color: var(--white); border: 2px solid rgba(255,255,255,.5); }
+
+    /* ── Badges ────────────────────────────────────────── */
+    .badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
+    .badges img { height: 22px; }
+
+    /* ── Section layout ────────────────────────────────── */
+    .section { padding: 64px 24px; }
+    .section--alt { background: var(--gray-1); }
+    .container { max-width: 1000px; margin: 0 auto; }
+    .section-title {
+      font-size: 1.75rem; font-weight: 700; color: var(--gray-9);
+      margin-bottom: 8px; text-align: center;
+    }
+    .section-sub { text-align: center; color: #64748b; margin-bottom: 40px; font-size: 1.05rem; }
+
+    /* ── Feature grid ──────────────────────────────────── */
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 20px; }
+    .feature-card {
+      background: var(--white); border: 1px solid var(--gray-2);
+      border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow);
+    }
+    .feature-card__icon { font-size: 2rem; margin-bottom: 12px; }
+    .feature-card h3  { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; color: var(--gray-9); }
+    .feature-card p   { font-size: .95rem; color: #475569; }
+
+    /* ── Screenshot placeholders ───────────────────────── */
+    .screenshots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+    .screenshot {
+      border: 2px dashed var(--gray-2); border-radius: var(--radius);
+      padding: 48px 16px; text-align: center; background: var(--gray-1);
+    }
+    .screenshot__label { font-weight: 600; color: var(--gray-7); margin-bottom: 6px; }
+    .screenshot__note  { font-size: .85rem; color: #94a3b8; }
+
+    /* ── Tech stack ────────────────────────────────────── */
+    .stack { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+    .tag {
+      background: var(--gray-1); border: 1px solid var(--gray-2);
+      border-radius: 999px; padding: 6px 18px;
+      font-size: .9rem; font-weight: 600; color: var(--gray-7);
+    }
+
+    /* ── Architecture box ──────────────────────────────── */
+    pre.arch {
+      background: var(--gray-9); color: #e2e8f0; border-radius: var(--radius);
+      padding: 28px 24px; overflow-x: auto; font-size: .82rem; line-height: 1.7;
+      font-family: "SF Mono", "Consolas", monospace;
+    }
+
+    /* ── Footer ────────────────────────────────────────── */
+    footer {
+      background: var(--gray-9); color: #94a3b8;
+      text-align: center; padding: 32px 24px; font-size: .9rem;
+    }
+    footer a { color: #cbd5e1; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────── -->
+<header class="hero">
+  <div class="hero__icon">🩺</div>
+  <h1>Neonatal Resuscitation Simulator</h1>
+  <p>
+    A <strong>voice-first</strong>, scenario-driven clinical training platform
+    that guides student clinicians through the NRP protocol via real-time
+    voice interaction, live instructor oversight, and automated performance reporting.
+  </p>
+
+  <div class="btn-row">
+    <a class="btn btn--primary"
+       href="https://github.com/NisirBage/neonatal-resuscitation-simulator">
+      ⭐ View on GitHub
+    </a>
+    <a class="btn btn--secondary"
+       href="https://github.com/NisirBage/neonatal-resuscitation-simulator#quick-start--local-development">
+      🚀 Quick Start
+    </a>
+    <a class="btn btn--secondary"
+       href="https://github.com/NisirBage/neonatal-resuscitation-simulator/blob/main/README.md">
+      📖 Documentation
+    </a>
+  </div>
+
+  <div class="badges">
+    <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python" />
+    <img src="https://img.shields.io/badge/FastAPI-0.137-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
+    <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black" alt="React" />
+    <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+    <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" alt="Docker" />
+    <img src="https://img.shields.io/badge/License-MIT-yellow" alt="MIT" />
+  </div>
+</header>
+
+<!-- ── Features ──────────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <h2 class="section-title">Key Features</h2>
+    <p class="section-sub">Everything an NRP training lab needs — in the browser.</p>
+
+    <div class="features">
+      <div class="feature-card">
+        <div class="feature-card__icon">🎙️</div>
+        <h3>Voice-First Interaction</h3>
+        <p>The simulator speaks each NRP prompt aloud. Students answer verbally — "yes" or "no" — using the browser's Web Speech API. Manual buttons provide a fallback.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">🔄</div>
+        <h3>Finite State Machine Engine</h3>
+        <p>All clinical logic lives in a JSON scenario file. The FSM enforces valid transitions, records self-loops (warm/dry, position airway), and never skips a protocol step.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">📡</div>
+        <h3>Live Instructor Dashboard</h3>
+        <p>Real-time FSM state display, override panel, manual timer controls, and a live event log — all pushed via WebSocket. No polling required on the instructor side.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">⏱️</div>
+        <h3>Birth Timer &amp; Ventilation Countdown</h3>
+        <p>An elapsed birth clock starts at session creation. A ventilation countdown bar appears during time-critical steps, with per-minute voice announcements.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">📊</div>
+        <h3>Session Replay &amp; Metrics</h3>
+        <p>After the session ends, step through every event with playback controls. A training score and metric breakdown are computed in a single O(N) pass over the event log.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">📄</div>
+        <h3>Four Export Formats</h3>
+        <p>PDF performance report, raw event CSV, clinical timeline CSV (clinical language), and colour-coded clinical XLSX — all generated on demand from the immutable event log.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">💾</div>
+        <h3>Persistent Sessions</h3>
+        <p>Every state transition is written to SQLite (PostgreSQL-ready). Sessions survive backend restarts — the FSM is fully reconstructed from the persisted event history.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">🔁</div>
+        <h3>Auto-Reconnecting WebSocket</h3>
+        <p>Exponential backoff (1 s → 30 s) keeps the student and instructor connected through network blips. State re-syncs automatically on reconnect.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Screenshots ────────────────────────────────────────────────────── -->
+<section class="section section--alt">
+  <div class="container">
+    <h2 class="section-title">Screenshots</h2>
+    <p class="section-sub">Visual overview of the student and instructor experience.</p>
+
+    <div class="screenshots">
+      <div class="screenshot">
+        <div class="feature-card__icon">🖥️</div>
+        <div class="screenshot__label">Student Dashboard</div>
+        <div class="screenshot__note">Voice prompt display, YES/NO controls, birth timer, ventilation bar</div>
+      </div>
+      <div class="screenshot">
+        <div class="feature-card__icon">🎓</div>
+        <div class="screenshot__label">Instructor Dashboard</div>
+        <div class="screenshot__note">Live FSM state, override panel, event log, timer controls</div>
+      </div>
+      <div class="screenshot">
+        <div class="feature-card__icon">▶️</div>
+        <div class="screenshot__label">Session Replay</div>
+        <div class="screenshot__note">Step-through timeline with colour-coded event badges</div>
+      </div>
+      <div class="screenshot">
+        <div class="feature-card__icon">📈</div>
+        <div class="screenshot__label">Performance Metrics</div>
+        <div class="screenshot__note">Training score, step timing, metric breakdown table</div>
+      </div>
+      <div class="screenshot">
+        <div class="feature-card__icon">📑</div>
+        <div class="screenshot__label">PDF Report</div>
+        <div class="screenshot__note">ReportLab PDF: score, metrics, full event timeline</div>
+      </div>
+      <div class="screenshot">
+        <div class="feature-card__icon">📋</div>
+        <div class="screenshot__label">Clinical Timeline (XLSX)</div>
+        <div class="screenshot__note">Colour-coded Excel workbook with clinical phase column</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Architecture ───────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <h2 class="section-title">Architecture</h2>
+    <p class="section-sub">Event-sourced, FSM-driven, real-time — built for clinical accuracy.</p>
+
+<pre class="arch">
+┌──────────────────────────────────────────────┐
+│           Browser — Student View              │
+│   React 18 + Web Speech API (TTS + STT)       │
+│              │  WebSocket (wss://)             │
+└──────────────┼───────────────────────────────┘
+               │
+┌──────────────┼───────────────────────────────┐
+│        Browser — Instructor View              │
+│   React 18   │  WebSocket (wss://)            │
+└──────────────┼───────────────────────────────┘
+               │
+┌──────────────▼───────────────────────────────┐
+│        FastAPI Backend  (Python 3.10)         │
+│                                               │
+│  REST API /api/*  WebSocket Manager  EventBus │
+│        └──────────────┬──────────────┘        │
+│             ScenarioRunner + FSMEngine         │
+│    (thread-safe · serialisable · event-sourced)│
+│                       │                       │
+│   SQLAlchemy async ───┴── SQLite / PostgreSQL  │
+└───────────────────────────────────────────────┘
+
+Deployment:
+  Backend  → Railway  (Docker, /health check, auto-restart)
+  Frontend → Vercel   (Vite SPA, auto-deploy from main)
+  CI/CD    → GitHub Actions (5-job pipeline)
+</pre>
+
+    <br/>
+    <div class="stack">
+      <span class="tag">Python 3.10</span>
+      <span class="tag">FastAPI</span>
+      <span class="tag">SQLAlchemy (async)</span>
+      <span class="tag">SQLite / PostgreSQL</span>
+      <span class="tag">React 18</span>
+      <span class="tag">TypeScript 5</span>
+      <span class="tag">Vite</span>
+      <span class="tag">Tailwind CSS</span>
+      <span class="tag">Web Speech API</span>
+      <span class="tag">WebSocket</span>
+      <span class="tag">Docker Compose</span>
+      <span class="tag">Railway</span>
+      <span class="tag">Vercel</span>
+      <span class="tag">GitHub Actions</span>
+      <span class="tag">ReportLab</span>
+      <span class="tag">openpyxl</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── Design Patterns ───────────────────────────────────────────────── -->
+<section class="section section--alt">
+  <div class="container">
+    <h2 class="section-title">Design Patterns</h2>
+    <p class="section-sub">Production engineering patterns applied throughout the codebase.</p>
+
+    <div class="features">
+      <div class="feature-card">
+        <div class="feature-card__icon">🔀</div>
+        <h3>Finite State Machine</h3>
+        <p>All scenario logic is data, not code. The FSM engine reads <code>scenarios/*.json</code> and enforces valid transitions — adding a new scenario requires zero backend changes.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">📝</div>
+        <h3>Event Sourcing</h3>
+        <p>Every state change is an immutable <code>SimulationEvent</code> appended to the database. Replay, metrics, and all four export formats are derived from this single source of truth.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">📣</div>
+        <h3>Pub/Sub EventBus</h3>
+        <p>The FSM publishes events to an in-process EventBus. WebSocket broadcasting, timer scheduling, and persistence each subscribe independently — fully decoupled.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">🗃️</div>
+        <h3>Repository Pattern</h3>
+        <p>A dedicated service layer isolates all database access. Swapping SQLite for PostgreSQL requires changing one connection string — no application logic changes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Developer ──────────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container" style="text-align:center">
+    <h2 class="section-title">Developer</h2>
+    <p class="section-sub">Built as a final-year software engineering project.</p>
+    <p style="max-width:600px;margin:0 auto 32px;color:#475569;">
+      This simulator was designed and built end-to-end as a capstone project demonstrating
+      full-stack development, event sourcing, real-time systems, clinical workflow design,
+      and production-grade deployment.
+    </p>
+    <div class="btn-row">
+      <a class="btn btn--primary" style="background:var(--blue);color:var(--white)"
+         href="https://github.com/NisirBage">
+        GitHub Profile
+      </a>
+      <a class="btn btn--secondary" style="border-color:var(--gray-2);color:var(--gray-7)"
+         href="https://github.com/NisirBage/neonatal-resuscitation-simulator/blob/main/CONTRIBUTING.md">
+        Contribute
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────── -->
+<footer>
+  <p>
+    Released under the <a href="https://github.com/NisirBage/neonatal-resuscitation-simulator/blob/main/LICENSE">MIT License</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/NisirBage/neonatal-resuscitation-simulator">GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/NisirBage/neonatal-resuscitation-simulator/blob/main/SECURITY.md">Security</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/NisirBage/neonatal-resuscitation-simulator/blob/main/CHANGELOG.md">Changelog</a>
+  </p>
+  <p style="margin-top:8px;font-size:.8rem;opacity:.6">
+    Neonatal Resuscitation Simulator · Academic Project · Not for clinical use
+  </p>
+</footer>
+
+</body>
+</html>

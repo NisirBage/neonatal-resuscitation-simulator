@@ -41,12 +41,26 @@ class ScenarioLoadResponse(BaseModel):
     state_count: int
 
 
-@router.get("/scenarios", response_model=list[ScenarioListItem])
+@router.get(
+    "/scenarios",
+    response_model=list[ScenarioListItem],
+    summary="List available scenarios",
+    description=(
+        "Returns every valid scenario file found in SCENARIOS_DIR. "
+        "Invalid or empty JSON files are silently skipped."
+    ),
+)
 async def list_scenarios() -> list[ScenarioListItem]:
     return _list_available_scenarios()
 
 
-@router.get("/scenarios/{scenario_id}", response_model=ScenarioMetadataResponse)
+@router.get(
+    "/scenarios/{scenario_id}",
+    response_model=ScenarioMetadataResponse,
+    summary="Get scenario metadata",
+    description="Returns high-level metadata for a single scenario without loading the full state graph.",
+    responses={404: {"description": "Scenario not found"}},
+)
 async def get_scenario(scenario_id: str) -> ScenarioMetadataResponse:
     scenario = _load_scenario_by_id(scenario_id)
     return ScenarioMetadataResponse(
@@ -61,6 +75,12 @@ async def get_scenario(scenario_id: str) -> ScenarioMetadataResponse:
 @router.post(
     "/scenarios/{scenario_id}/validate",
     response_model=ScenarioValidationResponse,
+    summary="Validate a scenario",
+    description=(
+        "Loads the scenario and runs full structural validation: "
+        "transition targets, action/timer references, and state graph integrity. "
+        "Always returns 200; check the `valid` field for the result."
+    ),
 )
 async def validate_scenario_endpoint(scenario_id: str) -> ScenarioValidationResponse:
     try:
@@ -82,7 +102,16 @@ async def validate_scenario_endpoint(scenario_id: str) -> ScenarioValidationResp
     return ScenarioValidationResponse(scenario_id=scenario.id, valid=True)
 
 
-@router.post("/scenarios/{scenario_id}/load", response_model=ScenarioLoadResponse)
+@router.post(
+    "/scenarios/{scenario_id}/load",
+    response_model=ScenarioLoadResponse,
+    summary="Load and parse a scenario",
+    description=(
+        "Loads, parses, and returns summary information for a scenario. "
+        "Useful for confirming a scenario is loadable before starting a session."
+    ),
+    responses={404: {"description": "Scenario not found"}, 422: {"description": "Scenario file is invalid"}},
+)
 async def load_scenario_endpoint(scenario_id: str) -> ScenarioLoadResponse:
     scenario = _load_scenario_by_id(scenario_id)
     return ScenarioLoadResponse(

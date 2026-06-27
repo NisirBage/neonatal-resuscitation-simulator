@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from app.fsm import SimulationEvent
 
-COMPLETION_STATE_ID = "simulation_complete"
+# All state IDs that represent a completed simulation (terminal states)
+COMPLETION_STATE_IDS = {"simulation_complete", "routine_care"}
 
 
 def compute_session_metrics(
@@ -62,4 +63,4 @@ def compute_session_metrics(
 
 
 def _completion_status(current_state_id: str) -> str:
-    return "complete" if current_state_id == COMPLETION_STATE_ID else "in_progress"
+    return "complete" if current_state_id in COMPLETION_STATE_IDS else "in_progress"

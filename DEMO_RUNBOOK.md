@@ -279,6 +279,5 @@ Student browser                     Instructor browser
 | `scenarios/baby_birth.json` | Clinical scenario definition (17 states) |
 | `backend/.env` | Local environment variables |
 | `.env` | Docker environment variables |
-| `ACCEPTANCE_TEST_REPORT.md` | Test results |
-| `terminals/acceptance_tests.py` | Automated acceptance test runner |
-| `terminals/regression_persistence.py` | Manual persistence regression test |
+| `backend/tests/` | Automated test suite (41 tests) |
+| `DEMO_RUNBOOK.md` | This file — demo procedures and recovery scripts |

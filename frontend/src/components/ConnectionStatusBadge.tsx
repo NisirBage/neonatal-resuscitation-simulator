@@ -5,14 +5,8 @@ interface ConnectionStatusBadgeProps {
 }
 
 function mapConnectionStatus(rawStatus: string): ConnectionBadgeStatus {
-  if (rawStatus === "connected") {
-    return "connected";
-  }
-
-  if (rawStatus === "connecting") {
-    return "reconnecting";
-  }
-
+  if (rawStatus === "connected") return "connected";
+  if (rawStatus === "connecting" || rawStatus === "reconnecting") return "reconnecting";
   return "disconnected";
 }
 
