@@ -16,15 +16,7 @@
       "metadata": {
         "voice_prompt": "Baby is born at {TIME}."
       },
-      "actions": [
-        {
-          "id": "confirm_birth",
-          "type": "yes_no",
-          "prompt": "Are you positioned and ready?",
-          "options": ["yes", "no"],
-          "metadata": { "role": "student" }
-        }
-      ],
+      "actions": [],
       "timers": [
         {
           "id": "birth_timer",
@@ -32,15 +24,21 @@
           "event": "birth_timer_elapsed",
           "auto_start": true,
           "metadata": { "label": "Birth timer" }
+        },
+        {
+          "id": "baby_born_delay_timer",
+          "duration_seconds": 15,
+          "event": "baby_born_delay_elapsed",
+          "auto_start": true,
+          "metadata": { "label": "Birth announcement delay" }
         }
       ],
       "transitions": [
         {
-          "id": "birth_confirmed",
-          "trigger": "action",
+          "id": "baby_born_delay_elapsed",
+          "trigger": "timer",
           "target_state": "put_on_mothers_chest",
-          "action_id": "confirm_birth",
-          "expected_response": "yes"
+          "timer_id": "baby_born_delay_timer"
         },
         {
           "id": "birth_timer_elapsed",
@@ -225,9 +223,9 @@
       "actions": [
         {
           "id": "start_ventilation",
-          "type": "yes_no",
-          "prompt": "Have you started ventilation and applied the pulse oximeter?",
-          "options": ["yes", "no"],
+          "type": "text",
+          "prompt": "Say 'Ventilation started' to confirm.",
+          "options": [],
           "metadata": { "intervention": "ventilation" }
         }
       ],
@@ -238,7 +236,7 @@
           "trigger": "action",
           "target_state": "ventilation_in_progress",
           "action_id": "start_ventilation",
-          "expected_response": "yes"
+          "text_match": "ventilation"
         },
         {
           "id": "instructor_start_ventilation",

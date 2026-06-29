@@ -209,7 +209,7 @@ async def export_session_csv(session_id: UUID) -> Response:
     summary="Export clinical timeline as CSV",
     description=(
         "Downloads a second-by-second clinical timeline CSV suitable for instructor review. "
-        "Columns: Time, Voice Prompt, Student Response, System Action, Instructor Action, Notes."
+        "Columns: Time, Voice Command / Response, System Action, Instructor Action, Notes."
     ),
     responses={404: {"description": "Session not found"}},
 )

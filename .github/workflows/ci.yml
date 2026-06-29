@@ -69,7 +69,70 @@ jobs:
       - name: TypeScript strict type check
         run: npx tsc --noEmit
 
-  # ── 3. Backend Docker image build ─────────────────────────────────────────
+  # ── 3. Frontend unit tests (Vitest) ───────────────────────────────────────
+  frontend-unit-tests:
+    name: Frontend Unit Tests (Vitest)
+    runs-on: ubuntu-latest
+    needs: typescript-check
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Vitest unit tests
+        run: npm test
+
+  # ── 4. Playwright E2E tests ────────────────────────────────────────────────
+  #    Runs against the Vite dev server with mocked backend (no real Python
+  #    server needed). Uses Chromium only to keep CI fast.
+  playwright-e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    needs: typescript-check
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run Playwright E2E tests
+        run: npx playwright test --reporter=github
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
+  # ── 5. Backend Docker image build ─────────────────────────────────────────
   #    Runs after backend-tests pass. Validates the production Dockerfile
   #    compiles and the image can be created without errors.
   backend-docker-build:
@@ -93,7 +156,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── 4. Frontend Docker image build ────────────────────────────────────────
+  # ── 6. Frontend Docker image build ────────────────────────────────────────
   #    Validates the multi-stage frontend Dockerfile (node build + nginx serve).
   frontend-docker-build:
     name: Frontend Docker Build
@@ -118,7 +181,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── 5. Frontend production build ───────────────────────────────────────────
+  # ── 7. Frontend production build ───────────────────────────────────────────
   #    Runs after the TypeScript check passes. Uses placeholder backend URLs
   #    so the build does not depend on a live deployment.
   frontend-build:

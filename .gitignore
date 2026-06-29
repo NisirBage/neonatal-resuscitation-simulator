@@ -57,3 +57,14 @@ alembic/versions/__pycache__/
 
 # ── Docker volumes ────────────────────────────────────────────────────────────
 data/
+
+# Playwright
+frontend/playwright-report/
+frontend/test-results/
+
+# TypeScript cache
+frontend/tsconfig.tsbuildinfo
+
+# Local QA scripts
+cdp_*.py
+qa_*.py

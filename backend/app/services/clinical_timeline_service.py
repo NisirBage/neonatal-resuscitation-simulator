@@ -24,7 +24,6 @@ get_clinical_phase = clinical_script.get_clinical_phase
 class _Row:
     __slots__ = (
         "voice_command",
-        "student_response",
         "system_action",
         "instructor_action",
         "notes",
@@ -32,7 +31,6 @@ class _Row:
 
     def __init__(self) -> None:
         self.voice_command = ""
-        self.student_response = ""
         self.system_action = ""
         self.instructor_action = ""
         self.notes = ""
@@ -68,13 +66,14 @@ def _build_prompt_map(scenario: Scenario) -> dict[str, str]:
 
 
 def _build_auto_timer_map(scenario: Scenario) -> dict[str, list[str]]:
-    """state_id → list of 'X Timer Started' labels for auto-start timers."""
+    """state_id → list of 'X Timer Started' labels for auto-start timers (empty labels excluded)."""
     result: dict[str, list[str]] = {}
     for state in scenario.states:
         labels = [
-            clinical_script.get_timer_started_label(t.id)
+            label
             for t in state.timers
             if t.auto_start
+            if (label := clinical_script.get_timer_started_label(t.id))
         ]
         if labels:
             result[state.id] = labels
@@ -99,8 +98,7 @@ def _fmt_duration(secs: float) -> str:
 
 _COLUMNS = [
     "Time",
-    "Voice Command",
-    "Student Response",
+    "Voice Command / Response",
     "System Action",
     "Instructor Action",
     "Notes",
@@ -196,7 +194,6 @@ def generate_clinical_csv(
         return timeline[s]  # type: ignore[return-value]
 
     terminal_states  = _build_terminal_states(scenario)
-    decision_states  = _build_decision_states(scenario)
 
     # ── Phase 2: OVERLAY ──────────────────────────────────────────────────────
     for event in history:
@@ -207,7 +204,8 @@ def generate_clinical_csv(
             row.voice_command = prompt_map.get(scenario.initial_state, "")
             row.append_system("Simulation Started")
             for label in auto_timer_map.get(scenario.initial_state, []):
-                row.append_system(label)
+                if label:
+                    row.append_system(label)
 
         elif event.type == "state_transition":
             target = event.target_state_id or ""
@@ -219,12 +217,13 @@ def generate_clinical_csv(
             if outcome:
                 row.append_system(outcome)
             for label in auto_timer_map.get(target, []):
-                row.append_system(label)
+                if label:
+                    row.append_system(label)
 
             # Voice prompt driven by state ENTRY.
-            # If the current second already carries a YES/NO decision row (from
-            # student_input), defer the new state's prompt to S+1 so both rows
-            # appear.  Terminal states emit no voice command.
+            # If the current second already carries a student response row,
+            # defer the new state's prompt to S+1 so both rows appear.
+            # Terminal states emit no voice command.
             if target not in terminal_states:
                 prompt_s = s + 1 if row.voice_command else s
                 if prompt_s < duration_seconds:
@@ -234,15 +233,15 @@ def generate_clinical_csv(
 
         elif event.type == "student_input":
             row = _row_at_offset(s)
-            if event.state_id in decision_states:
-                row.voice_command = "YES/NO"
-            row.student_response = str(event.payload.get("response", "")).upper()
+            response = str(event.payload.get("response", "")).upper()
+            if response:
+                row.voice_command = response
 
         elif event.type == "audio_input":
             row = _row_at_offset(s)
-            if event.state_id in decision_states:
-                row.voice_command = "YES/NO"
-            row.student_response = str(event.payload.get("transcript", "")).upper()
+            transcript = str(event.payload.get("transcript", "")).upper()
+            if transcript:
+                row.voice_command = transcript
 
         elif event.type == "timer_event":
             timer_id = str(event.payload.get("timer_id", ""))
@@ -264,15 +263,14 @@ def generate_clinical_csv(
     writer.writeheader()
 
     for s in range(duration_seconds):
-        wall = t0 + timedelta(seconds=s)
+        wall = (t0 + timedelta(seconds=s)).astimezone()
         row  = timeline[s]
         writer.writerow({
-            "Time":              wall.strftime("%H:%M:%S"),
-            "Voice Command":     row.voice_command     if row else "",
-            "Student Response":  row.student_response  if row else "",
-            "System Action":     row.system_action     if row else "",
-            "Instructor Action": row.instructor_action if row else "",
-            "Notes":             row.notes             if row else "",
+            "Time":                     wall.strftime("%H:%M:%S"),
+            "Voice Command / Response": row.voice_command     if row else "",
+            "System Action":            row.system_action     if row else "",
+            "Instructor Action":        row.instructor_action if row else "",
+            "Notes":                    row.notes             if row else "",
         })
 
     return buffer.getvalue()
@@ -421,7 +419,7 @@ def _build_xlsx_timeline(
     last_phase = clinical_script.get_clinical_phase(scenario.initial_state)
 
     for s in range(duration_seconds):
-        wall = t0 + timedelta(seconds=s)
+        wall = (t0 + timedelta(seconds=s)).astimezone()
         a = acc.get(s)
         if a:
             phase = a.clinical_phase or last_phase
@@ -439,7 +437,7 @@ def _build_xlsx_timeline(
             ))
         else:
             result.append(_XlsxRow(
-                time=wall.strftime("%H:%M:%S"),
+                time=wall.strftime("%H:%M:%S"),  # already local via astimezone above
                 clinical_phase=last_phase,
                 voice_prompt="",
                 student_response="",
@@ -533,9 +531,11 @@ def generate_clinical_xlsx(
     t0     = history[0].timestamp if history else datetime.now(timezone.utc)
     t_last = history[-1].timestamp if history else t0
     duration_secs = (t_last - t0).total_seconds()
-    sim_date   = t0.strftime("%d %B %Y")
-    start_time = t0.strftime("%H:%M:%S UTC")
-    end_time   = t_last.strftime("%H:%M:%S UTC") if history else "—"
+    t0_local     = t0.astimezone()
+    t_last_local = t_last.astimezone()
+    sim_date   = t0_local.strftime("%d %B %Y")
+    start_time = t0_local.strftime("%H:%M:%S")
+    end_time   = t_last_local.strftime("%H:%M:%S") if history else "—"
     outcome    = clinical_script.get_outcome_label(current_state_id)
 
     _meta_row(current_row, "Session ID",      str(session_id)); current_row += 1

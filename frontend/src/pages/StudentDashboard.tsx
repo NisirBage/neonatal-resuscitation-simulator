@@ -6,6 +6,10 @@ import { SessionReplay } from "../components/SessionReplay";
 import { useTimerCountdown } from "../hooks/useTimerCountdown";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
+import { useVoiceReliability, addLifecycleListeners } from "../hooks/useVoiceReliability";
+import { useNoiseDetector } from "../hooks/useNoiseDetector";
+import { normalizeToYesNo } from "../services/voice/normalize";
+import { voiceTelemetry, detectBrowser, detectOS } from "../services/voiceTelemetry";
 import {
   downloadClinicalCsv,
   downloadClinicalXlsx,
@@ -112,13 +116,6 @@ function playAlarmBeep(frequency: number, duration: number, count: number): void
 // States that have an active ventilation countdown timer
 const VENT_TIMER_STATES = new Set(["ventilation_in_progress", "ventilation_corrective_steps", "continue_ventilation_15s"]);
 
-function normaliseToYesNo(text: string): "yes" | "no" | null {
-  const t = text.trim().toLowerCase();
-  if (/\b(yes|yeah|yep|yup|correct|affirmative)\b/.test(t)) return "yes";
-  if (/\b(no|nope|negative|nah)\b/.test(t)) return "no";
-  return null;
-}
-
 function hasPrimaryYesNo(state: CurrentState | null): boolean {
   if (!state) return false;
   return state.actions.some((a) => a.type === "yes_no" && !a.metadata.fallback_only);
@@ -127,6 +124,11 @@ function hasPrimaryYesNo(state: CurrentState | null): boolean {
 function primaryYesNo(state: CurrentState | null) {
   if (!state) return null;
   return state.actions.find((a) => a.type === "yes_no" && !a.metadata.fallback_only) ?? null;
+}
+
+function primaryTextAction(state: CurrentState | null) {
+  if (!state) return null;
+  return state.actions.find((a) => a.type === "text") ?? null;
 }
 
 function isTerminal(state: CurrentState | null): boolean {
@@ -139,7 +141,7 @@ function formatMMSS(seconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-type VoicePhase = "idle" | "speaking" | "listening" | "processing" | "complete";
+type VoicePhase = "idle" | "speaking" | "listening" | "processing" | "complete" | "confirming";
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -162,6 +164,7 @@ export function StudentDashboard() {
   // Voice UI state
   const [voicePhase, setVoicePhase]         = useState<VoicePhase>("idle");
   const [lastRecognized, setLastRecognized] = useState("");
+  const [lastConfidence, setLastConfidence] = useState<number | null>(null);
   // Dev panel metrics (only rendered when NRS_DEV=1 in localStorage)
   const [lastHttpStatus, setLastHttpStatus] = useState<number | null>(null);
 
@@ -182,12 +185,19 @@ export function StudentDashboard() {
   // simulation_complete (two entry paths produce different spoken conclusions).
   const prevStateIdRef  = useRef<string | null>(null);
   // Voice result handler lives in a ref; startContinuous gets a stable proxy to it
-  const voiceHandlerRef = useRef<(text: string) => void>(() => {});
+  const voiceHandlerRef = useRef<(text: string, confidence: number) => void>(() => {});
 
   useEffect(() => { sessionIdRef.current    = sessionId;    }, [sessionId]);
   useEffect(() => { currentStateRef.current = currentState; }, [currentState]);
   useEffect(() => { busyRef.current         = busy;         }, [busy]);
   useEffect(() => { voicePhaseRef.current   = voicePhase;   }, [voicePhase]);
+
+  // Latency tracking refs (for telemetry — Part 6)
+  const listenStartRef  = useRef<number | null>(null);
+  const submitStartRef  = useRef<number | null>(null);
+  const httpDoneRef     = useRef<number | null>(null);
+  // Attempt counter within the current FSM state
+  const attemptRef      = useRef(0);
 
   // Speech hooks
   const {
@@ -199,13 +209,21 @@ export function StudentDashboard() {
     getGeneration,
   } = useSpeechRecognition();
 
+  // Reliability layer (Parts 1, 3, 4, 9)
+  const reliability = useVoiceReliability();
+
+  // Noise detector (Part 5) — active only while listening
+  const { noiseLevel, rms, warningMessage: noiseWarning } = useNoiseDetector(
+    voicePhase === "listening"
+  );
+
   const { speak, cancel: cancelSpeech, getSpeechToken } = useSpeechSynthesis();
 
   const activeTimer = useTimerCountdown(currentState);
 
   // Stable proxy — passed to startContinuous once, always delegates to latest handler
-  const stableProxy = useCallback((text: string) => {
-    voiceHandlerRef.current(text);
+  const stableProxy = useCallback((text: string, confidence: number) => {
+    voiceHandlerRef.current(text, confidence);
   }, []);
 
   // ── Scenarios on mount ────────────────────────────────────────────────────
@@ -268,7 +286,8 @@ export function StudentDashboard() {
     vlog("TIMER", `birth timer: ${mins} min — announcing`);
     stopContinuous();
     speak(`${mins} minute${mins !== 1 ? "s" : ""} since birth.`, () => {
-      if (sessionIdRef.current && hasPrimaryYesNo(currentStateRef.current)) {
+      const _s = currentStateRef.current;
+      if (sessionIdRef.current && (hasPrimaryYesNo(_s) || !!primaryTextAction(_s))) {
         setVoicePhase("listening");
         startContinuous(stableProxy);
       }
@@ -286,10 +305,38 @@ export function StudentDashboard() {
     };
   }, [stopContinuous, cancelSpeech]);
 
+  // ── Browser lifecycle: pause SR when tab hidden, resume when restored (Part 10) ──
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const cleanup = addLifecycleListeners(
+      () => {
+        // Tab hidden — stop SR to avoid Chrome aborting it silently
+        if (voicePhaseRef.current === "listening") {
+          vlog("LIFECYCLE", "tab hidden — pausing recognition");
+          stopContinuous();
+        }
+      },
+      () => {
+        // Tab restored — restart if we were listening
+        if (voicePhaseRef.current === "listening" || voicePhaseRef.current === "idle") {
+          const state = currentStateRef.current;
+          if (sessionIdRef.current && (hasPrimaryYesNo(state) || !!primaryTextAction(state))) {
+            vlog("LIFECYCLE", "tab restored — resuming recognition");
+            listenStartRef.current = Date.now();
+            setVoicePhase("listening");
+            startContinuous(stableProxy);
+          }
+        }
+      },
+    );
+    return cleanup;
+  }, [sessionId, stopContinuous, startContinuous, stableProxy]);
+
   // ── Submit yes/no — shared by voice and YES/NO buttons ───────────────────
 
   const submitResponse = useCallback(
-    async (sid: string, actionId: string, response: "yes" | "no") => {
+    async (sid: string, actionId: string, response: string) => {
       vlog("FSM", `submitting response: action=${actionId} response=${response}`);
       setBusy(true);
       busyRef.current = true;
@@ -308,7 +355,7 @@ export function StudentDashboard() {
           setVoicePhase("speaking");
           speak(voicePrompt(session.current_state), () => {
             const state = currentStateRef.current;
-            if (sessionIdRef.current && hasPrimaryYesNo(state)) {
+            if (sessionIdRef.current && (hasPrimaryYesNo(state) || !!primaryTextAction(state))) {
               vlog("MIC", "microphone ON — retry after no-transition");
               setVoicePhase("listening");
               startContinuous(stableProxy);
@@ -325,7 +372,7 @@ export function StudentDashboard() {
         setError(msg);
         speak("An error occurred. Please try again.", () => {
           const state = currentStateRef.current;
-          if (sessionIdRef.current && hasPrimaryYesNo(state)) {
+          if (sessionIdRef.current && (hasPrimaryYesNo(state) || !!primaryTextAction(state))) {
             setVoicePhase("listening");
             startContinuous(stableProxy);
           } else {
@@ -350,12 +397,13 @@ export function StudentDashboard() {
       speak(prompt, () => {
         vlog("TTS", "speech ended");
         const state = currentStateRef.current;
-        if (sessionIdRef.current && hasPrimaryYesNo(state)) {
-          vlog("MIC", "microphone ON — listening for YES / NO");
+        if (sessionIdRef.current && (hasPrimaryYesNo(state) || !!primaryTextAction(state))) {
+          vlog("MIC", "microphone ON — listening for response");
+          listenStartRef.current = Date.now();
           setVoicePhase("listening");
           startContinuous(stableProxy);
         } else {
-          vlog("MIC", "microphone OFF — no yes/no action in current state");
+          vlog("MIC", "microphone OFF — no active action in current state");
           setVoicePhase("idle");
         }
       });
@@ -366,42 +414,152 @@ export function StudentDashboard() {
   // ── Wire voice result handler ─────────────────────────────────────────────
 
   useEffect(() => {
-    voiceHandlerRef.current = (rawText: string) => {
-      vlog("MIC", `recognised: "${rawText}"`);
-      const normalized = normaliseToYesNo(rawText);
+    voiceHandlerRef.current = (rawText: string, confidence: number) => {
+      vlog("MIC", `recognised: "${rawText}" confidence=${confidence.toFixed(2)}`);
       setLastRecognized(rawText);
+      setLastConfidence(confidence);
 
-      if (!normalized) {
-        vlog("MIC", `not recognised as YES/NO — prompting retry`);
+      // Compute recognition latency
+      const recognitionLatencyMs = listenStartRef.current !== null
+        ? Date.now() - listenStartRef.current
+        : null;
+
+      // Text action early-exit: bypass yes/no normalization for states like ventilation_path
+      {
+        const _ts = currentStateRef.current;
+        const _sid = sessionIdRef.current;
+        const textAct = primaryTextAction(_ts);
+        if (textAct && !busyRef.current && _sid) {
+          vlog("MIC", `text action — submitting raw transcript: "${rawText}"`);
+          stopContinuous();
+          setVoicePhase("processing");
+          void submitResponse(_sid, textAct.id, rawText);
+          return;
+        }
+      }
+
+      // Route through the reliability layer (Parts 1, 3, 4, 9)
+      const action = reliability.processResult(rawText, confidence);
+      vlog("MIC", `reliability action: ${action.type}`, action);
+
+      const restartListening = () => {
+        const state = currentStateRef.current;
+        if (sessionIdRef.current && (hasPrimaryYesNo(state) || !!primaryTextAction(state))) {
+          listenStartRef.current = Date.now();
+          setVoicePhase("listening");
+          startContinuous(stableProxy);
+        } else {
+          setVoicePhase("idle");
+        }
+      };
+
+      if (action.type === "ignore" || action.type === "circuit_open") {
+        if (action.type === "circuit_open") {
+          vlog("MIC", "circuit breaker open — manual fallback active");
+        }
+        return;
+      }
+
+      if (action.type === "manual_fallback") {
+        vlog("MIC", `MAX_RETRIES exhausted — showing manual fallback`);
         stopContinuous();
-        setVoicePhase("speaking");
-        speak("I didn't understand. Please answer yes or no.", () => {
-          const state = currentStateRef.current;
-          if (sessionIdRef.current && hasPrimaryYesNo(state)) {
-            vlog("MIC", "microphone ON — retry listening");
-            setVoicePhase("listening");
-            startContinuous(stableProxy);
-          } else {
-            setVoicePhase("idle");
-          }
+        setVoicePhase("idle");
+        speak("Please use the YES or NO buttons to answer.", undefined);
+        voiceTelemetry.record({
+          sessionId: sessionIdRef.current ?? "",
+          stateId:   currentStateRef.current?.id ?? "",
+          attemptNumber: ++attemptRef.current,
+          timestamp: Date.now(),
+          recognitionLatencyMs, submitLatencyMs: null, transitionLatencyMs: null,
+          retryCount: reliability.retryCount,
+          confidence: confidence || null,
+          outcome: "manual_fallback",
+          normalized: "unknown",
+          browser: detectBrowser(), os: detectOS(),
+          micError: null, speechError: null,
+          noiseLevel: noiseLevel ?? null, silenceDurationMs: null,
         });
         return;
       }
 
-      vlog("MIC", `normalised → ${normalized.toUpperCase()}`);
-      setLastRecognized(normalized);
+      if (action.type === "retry") {
+        const msg = action.reason === "low_confidence"
+          ? "I couldn't hear that clearly. Please answer yes or no."
+          : "I didn't understand. Please answer yes or no.";
+        vlog("MIC", `retry #${action.retryNumber}: ${action.reason}`);
+        stopContinuous();
+        setVoicePhase("speaking");
+        speak(msg, restartListening);
+        voiceTelemetry.record({
+          sessionId: sessionIdRef.current ?? "",
+          stateId:   currentStateRef.current?.id ?? "",
+          attemptNumber: ++attemptRef.current,
+          timestamp: Date.now(),
+          recognitionLatencyMs, submitLatencyMs: null, transitionLatencyMs: null,
+          retryCount: action.retryNumber,
+          confidence: confidence || null,
+          outcome: action.reason === "low_confidence" ? "rejected_low_confidence" : "retry_unknown",
+          normalized: "unknown",
+          browser: detectBrowser(), os: detectOS(),
+          micError: null, speechError: null,
+          noiseLevel: noiseLevel ?? null, silenceDurationMs: null,
+        });
+        return;
+      }
+
+      if (action.type === "confirm") {
+        vlog("MIC", `medium confidence — asking confirmation: "${action.prompt}"`);
+        setLastRecognized(action.normalised);
+        stopContinuous();
+        setVoicePhase("confirming");
+        speak(action.prompt, () => {
+          reliability.enterConfirmationMode(action.normalised);
+          listenStartRef.current = Date.now();
+          setVoicePhase("listening");
+          startContinuous(stableProxy);
+        });
+        return;
+      }
+
+      // action.type === "accept"
+      const { normalised } = action;
+      vlog("MIC", `normalised → ${normalised.toUpperCase()} (confidence=${confidence.toFixed(2)})`);
+      setLastRecognized(normalised);
+
       const state = currentStateRef.current;
       const sid   = sessionIdRef.current;
       if (!state || !sid || busyRef.current) return;
 
-      const action = primaryYesNo(state);
-      if (!action) return;
+      const fsm_action = primaryYesNo(state);
+      if (!fsm_action) return;
 
       vlog("MIC", "microphone OFF — response accepted, submitting");
       stopContinuous();
-      void submitResponse(sid, action.id, normalized);
+      submitStartRef.current = Date.now();
+      void submitResponse(sid, fsm_action.id, normalised).then(() => {
+        httpDoneRef.current = Date.now();
+        const submitLatencyMs = submitStartRef.current !== null
+          ? httpDoneRef.current - submitStartRef.current : null;
+        reliability.recordSuccess();
+        voiceTelemetry.record({
+          sessionId: sid,
+          stateId:   state.id,
+          attemptNumber: ++attemptRef.current,
+          timestamp: Date.now(),
+          recognitionLatencyMs,
+          submitLatencyMs,
+          transitionLatencyMs: null, // set later via WS event timing
+          retryCount: reliability.retryCount,
+          confidence: confidence || null,
+          outcome: action.type === "accept" ? "accepted" : "confirmation_accepted",
+          normalized: normalised,
+          browser: detectBrowser(), os: detectOS(),
+          micError: null, speechError: null,
+          noiseLevel: noiseLevel ?? null, silenceDurationMs: null,
+        });
+      });
     };
-  }, [speak, stopContinuous, startContinuous, stableProxy, submitResponse]);
+  }, [speak, stopContinuous, startContinuous, stableProxy, submitResponse, reliability, noiseLevel]);
 
   // ── Voice loop: re-fires whenever FSM state changes ───────────────────────
 
@@ -426,6 +584,9 @@ export function StudentDashboard() {
     }
 
     vlog("FSM", `state entered: ${currentState.id}`, { name: currentState.name, prev: prevStateId });
+    // Reset reliability state on every new FSM state (Parts 3, 4, 9)
+    reliability.resetForNewState();
+    attemptRef.current = 0;
 
     if (isTerminal(currentState)) {
       stopContinuous();
@@ -457,10 +618,27 @@ export function StudentDashboard() {
       stopContinuous();
       cancelSpeech();
       setLastRecognized(response);
+      // Manual button clears circuit breaker and reliability state (Part 4)
+      reliability.recordSuccess();
       void submitResponse(sid, action.id, response);
     },
-    [stopContinuous, cancelSpeech, submitResponse]
+    [stopContinuous, cancelSpeech, submitResponse, reliability]
   );
+
+  // ── Keyboard shortcuts Y / N — route through the same handleButton path (Part 4) ──
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Only active when manual fallback is visible or in a YES/NO listening state
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (!currentStateRef.current || !sessionIdRef.current || busyRef.current) return;
+      if (!hasPrimaryYesNo(currentStateRef.current)) return;
+      if (e.key === "y" || e.key === "Y") { e.preventDefault(); handleButton("yes"); }
+      if (e.key === "n" || e.key === "N") { e.preventDefault(); handleButton("no"); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleButton]);
 
   // ── Session management ────────────────────────────────────────────────────
 
@@ -640,12 +818,15 @@ export function StudentDashboard() {
 
   const micLabel = !micSupported
     ? "Voice unavailable — use buttons"
-    : voicePhase === "listening"  ? "Listening…"
-    : voicePhase === "speaking"   ? "Speaking…"
-    : voicePhase === "processing" ? "Processing…"
-    : voicePhase === "complete"   ? "Simulation complete"
-    : sessionId                   ? "Ready"
-    :                               "Start a session";
+    : reliability.circuitOpen      ? "Voice paused — use buttons below"
+    : reliability.showManualFallback ? "Please answer using the buttons"
+    : voicePhase === "listening"   ? "Listening…"
+    : voicePhase === "speaking"    ? "Speaking…"
+    : voicePhase === "confirming"  ? "Confirming…"
+    : voicePhase === "processing"  ? "Processing…"
+    : voicePhase === "complete"    ? "Simulation complete"
+    : sessionId                    ? "Ready"
+    :                                "Start a session";
 
   const micRingClass =
     voicePhase === "listening"
@@ -819,8 +1000,44 @@ export function StudentDashboard() {
           ) : null}
         </div>
 
-        {/* Emergency YES / NO buttons */}
-        {hasYesNo && sessionId && !isComplete ? (
+        {/* Noise / silence warning (Part 5) — advisory only, never blocks FSM */}
+        {voicePhase === "listening" && noiseWarning ? (
+          <div className="w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-400">
+            {noiseWarning}
+          </div>
+        ) : null}
+
+        {/* Manual fallback — shown after MAX_RETRIES or circuit open (Parts 4, 9) */}
+        {hasYesNo && sessionId && !isComplete && (reliability.showManualFallback || reliability.circuitOpen) ? (
+          <div className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-4">
+            <p className="mb-3 text-center text-sm font-semibold text-slate-300">
+              {reliability.circuitOpen
+                ? "Voice recognition paused. Please answer using the buttons (Y / N)."
+                : "Voice not recognised after several attempts. Please answer using the buttons (Y / N)."}
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                className="rounded-2xl border-2 border-clinical-green bg-clinical-green/20 py-6 text-3xl font-black text-clinical-green transition hover:bg-clinical-green hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                disabled={busy}
+                onClick={() => handleButton("yes")}
+                type="button"
+              >
+                YES <span className="text-base font-normal opacity-60">[Y]</span>
+              </button>
+              <button
+                className="rounded-2xl border-2 border-rose-500 bg-rose-500/20 py-6 text-3xl font-black text-rose-400 transition hover:bg-rose-500 hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                disabled={busy}
+                onClick={() => handleButton("no")}
+                type="button"
+              >
+                NO <span className="text-base font-normal opacity-60">[N]</span>
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Emergency YES / NO buttons — always visible for quick override */}
+        {hasYesNo && sessionId && !isComplete && !reliability.showManualFallback && !reliability.circuitOpen ? (
           <div className="w-full">
             <div className="grid grid-cols-2 gap-4">
               <button
@@ -936,6 +1153,13 @@ export function StudentDashboard() {
           Disable:
             localStorage.removeItem('NRS_DEV'); location.reload();
       */}
+      {/* ── Dev diagnostics panel (Part 7) ────────────────────────────────────
+          Hidden by default. Enable via browser console:
+            localStorage.setItem('NRS_DEV', '1'); location.reload();
+          Disable:
+            localStorage.removeItem('NRS_DEV'); location.reload();
+          MUST be disabled in production (no NRS_DEV key in localStorage).
+      */}
       {typeof window !== "undefined" && window.localStorage.getItem("NRS_DEV") === "1" ? (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-black/90 border-t border-green-500/40 px-4 py-2 font-mono text-[10px] text-green-400 overflow-x-auto">
           <div className="flex flex-wrap gap-x-6 gap-y-1 max-w-full">
@@ -943,6 +1167,12 @@ export function StudentDashboard() {
             <span><span className="text-green-600">FSM</span> {currentState?.id ?? "—"}</span>
             <span><span className="text-green-600">RAW</span> &ldquo;{rawTranscript || "—"}&rdquo;</span>
             <span><span className="text-green-600">NORM</span> &ldquo;{lastRecognized || "—"}&rdquo;</span>
+            <span><span className="text-green-600">CONF</span> {lastConfidence !== null ? lastConfidence.toFixed(2) : "—"}</span>
+            <span><span className="text-green-600">RETRY</span> {reliability.retryCount}/{reliability.retryCount}</span>
+            <span><span className="text-green-600">CIRC</span> {reliability.circuitOpen ? "OPEN" : "closed"}</span>
+            <span><span className="text-green-600">FALLBK</span> {reliability.showManualFallback ? "Y" : "N"}</span>
+            <span><span className="text-green-600">NOISE</span> {noiseLevel}</span>
+            <span><span className="text-green-600">RMS</span> {rms.toFixed(3)}</span>
             <span><span className="text-green-600">HTTP</span> {lastHttpStatus !== null ? String(lastHttpStatus) : "—"}</span>
             <span><span className="text-green-600">WS</span> {wsStatus}</span>
             <span><span className="text-green-600">GEN</span> {getGeneration()}</span>

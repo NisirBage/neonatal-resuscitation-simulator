@@ -77,6 +77,7 @@ CLINICAL_PHASES: dict[str, str] = {
 
 TIMER_ALARM_CSV_LABELS: dict[str, str] = {
     "birth_timer":                   "BIRTH TIMER ALARM",
+    "baby_born_delay_timer":         "BIRTH ANNOUNCEMENT COMPLETE",
     "ventilation_timer":             "VENTILATION TIMER ALARM",
     "continue_ventilation_timer":    "CONTINUE VENTILATION COMPLETE",
     "corrective_ventilation_timer":  "CORRECTIVE VENTILATION TIMER ALARM",
@@ -97,6 +98,7 @@ TIMER_ALARM_XLSX_LABELS: dict[str, str] = {
 
 TIMER_STARTED_LABELS: dict[str, str] = {
     "birth_timer":                   "BIRTH TIMER STARTED",
+    "baby_born_delay_timer":         "",  # internal 15-second delay, not shown in timeline
     "ventilation_timer":             "VENTILATION TIMER 30 SEC",
     "continue_ventilation_timer":    "CONTINUE VENTILATION TIMER STARTED",
     "corrective_ventilation_timer":  "CORRECTIVE VENTILATION TIMER 30 SEC",

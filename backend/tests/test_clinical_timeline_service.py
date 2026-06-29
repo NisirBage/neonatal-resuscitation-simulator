@@ -165,8 +165,9 @@ def test_bom_and_correct_columns() -> None:
 
     assert result.startswith("﻿")
     rows = _parse_rows(result)
-    for col in ["Time", "Voice Command", "Student Response", "System Action", "Instructor Action", "Notes"]:
+    for col in ["Time", "Voice Command / Response", "System Action", "Instructor Action", "Notes"]:
         assert col in rows[0], f"Column '{col}' missing"
+    assert "Student Response" not in rows[0], "Student Response column must not appear in CSV"
 
 
 # ── Test 3: session_started sets voice prompt + system action + auto timer ─────
@@ -177,14 +178,14 @@ def test_session_started_row() -> None:
 
     rows = _parse_rows(result)
     # The Time column carries the clock; Voice Command is phrase-only, no timestamp.
-    assert rows[0]["Voice Command"] == "BABY BORN AT"
+    assert rows[0]["Voice Command / Response"] == "BABY BORN AT"
     assert "Simulation Started" in rows[0]["System Action"]
     assert "BIRTH TIMER STARTED" in rows[0]["System Action"]
 
 
-# ── Test 4: Student response YES/NO normalised to uppercase ───────────────────
+# ── Test 4: Decision states show YES/NO in Voice Command / Response column ─────
 
-def test_student_response_uppercased() -> None:
+def test_decision_states_show_yes_no_prompt() -> None:
     history = [
         _event("session_started", "baby_born", 0),
         _event("student_input", "baby_born", 3, {"action_id": "confirm_birth", "response": "yes"}),
@@ -194,8 +195,9 @@ def test_student_response_uppercased() -> None:
     ]
     rows = _parse_rows(generate_clinical_csv(uuid4(), history, _make_scenario()))
 
-    assert rows[3]["Student Response"] == "YES"
-    assert rows[7]["Student Response"] == "NO"
+    # Student responses appear as the actual answer in the unified column.
+    assert rows[3]["Voice Command / Response"] == "YES"
+    assert rows[7]["Voice Command / Response"] == "NO"
 
 
 # ── Test 5: YES/NO protocol rows + deferred state prompt when simultaneous ──────
@@ -216,16 +218,14 @@ def test_yes_no_protocol_rows_restored() -> None:
     ]
     rows = _parse_rows(generate_clinical_csv(uuid4(), history, _make_scenario()))
 
-    # Second 5: student answered (decision row) — YES/NO in Voice Command.
-    assert rows[5]["Voice Command"]    == "YES/NO"
-    assert rows[5]["Student Response"] == "YES"
-    # New state's prompt deferred to S+1 because YES/NO occupies second 5.
-    assert rows[6]["Voice Command"]    == "IS BABY CRYING"
+    # Second 5: student answered — actual response in Voice Command / Response.
+    assert rows[5]["Voice Command / Response"] == "YES"
+    # New state's prompt deferred to S+1 because the response occupies second 5.
+    assert rows[6]["Voice Command / Response"] == "IS BABY CRYING"
 
-    # Second 9: terminal transition — YES/NO decision row; ROUTINE CARE system action.
-    assert rows[9]["Voice Command"]    == "YES/NO"
-    assert rows[9]["Student Response"] == "YES"
-    assert rows[9]["System Action"]    == "ROUTINE CARE"
+    # Second 9: terminal transition — actual response; ROUTINE CARE system action.
+    assert rows[9]["Voice Command / Response"] == "YES"
+    assert rows[9]["System Action"]            == "ROUTINE CARE"
 
 
 # ── Test 6: Timer alarm shows clinical label ───────────────────────────────────
@@ -293,8 +293,8 @@ def test_time_column_and_row_count() -> None:
     rows = _parse_rows(generate_clinical_csv(uuid4(), history, _make_scenario()))
 
     assert len(rows) == 66  # 0..65 inclusive
-    assert rows[0]["Time"] == "10:30:00"
-    assert rows[65]["Time"] == "10:31:05"
+    assert rows[0]["Time"] == _BASE.astimezone().strftime("%H:%M:%S")
+    assert rows[65]["Time"] == (_BASE + timedelta(seconds=65)).astimezone().strftime("%H:%M:%S")
 
 
 # ── Test 10b: 20-second wait — blank rows preserved, columns independent ──────
@@ -316,20 +316,16 @@ def test_twenty_second_wait_blank_rows() -> None:
     rows = _parse_rows(generate_clinical_csv(uuid4(), history, _make_scenario()))
 
     # State entered at second 7 — voice command appears here, not at answer time.
-    assert rows[7]["Voice Command"]    == "IS BABY CRYING"
-    assert rows[7]["Student Response"] == ""
+    assert rows[7]["Voice Command / Response"] == "IS BABY CRYING"
 
     # Seconds 8–26: completely blank
     for s in range(8, 27):
-        assert rows[s]["Voice Command"]    == "", f"Row {s} voice should be blank"
-        assert rows[s]["Student Response"] == "", f"Row {s} response should be blank"
-        assert rows[s]["System Action"]    == "", f"Row {s} system should be blank"
+        assert rows[s]["Voice Command / Response"] == "", f"Row {s} voice should be blank"
+        assert rows[s]["System Action"]            == "", f"Row {s} system should be blank"
 
-    # Second 27: YES/NO decision row + student response + system action.
-    # routine_care is terminal — voice command is YES/NO from decision, not a state prompt.
-    assert rows[27]["Voice Command"]    == "YES/NO"
-    assert rows[27]["Student Response"] == "YES"
-    assert rows[27]["System Action"]    == "ROUTINE CARE"
+    # Second 27: actual student response + system action.
+    assert rows[27]["Voice Command / Response"] == "YES"
+    assert rows[27]["System Action"]            == "ROUTINE CARE"
 
 
 # ── Test 10c: terminal-state transitions never emit a voice command row ───────
@@ -342,10 +338,9 @@ def test_terminal_transition_no_voice_command() -> None:
     ]
     rows = _parse_rows(generate_clinical_csv(uuid4(), history, _make_scenario()))
 
-    # Second 3: YES/NO decision row; routine_care is terminal so no state prompt.
-    assert rows[3]["Voice Command"]    == "YES/NO"
-    assert rows[3]["Student Response"] == "YES"
-    assert rows[3]["System Action"]    == "ROUTINE CARE"
+    # Second 3: actual student response; routine_care is terminal so no state prompt.
+    assert rows[3]["Voice Command / Response"] == "YES"
+    assert rows[3]["System Action"]            == "ROUTINE CARE"
 
 
 # ── Test 10d: corrective-ventilation loop emits repeated prompts ──────────────
@@ -445,32 +440,29 @@ def test_corrective_ventilation_loop_repeated_prompts() -> None:
     rows = _parse_rows(generate_clinical_csv(uuid4(), history, scenario))
 
     # Second 0: initial state entered
-    assert rows[0]["Voice Command"] == "MEASURE HEART RATE EVERY 15 SECONDS"
+    assert rows[0]["Voice Command / Response"] == "MEASURE HEART RATE EVERY 15 SECONDS"
 
     # Second 30: timer fires AND state entered — both on same row
     assert "VENTILATION TIMER ALARM" in rows[30]["System Action"]
-    assert rows[30]["Voice Command"] == "IS THE HEART RATE INCREASING"
+    assert rows[30]["Voice Command / Response"] == "IS THE HEART RATE INCREASING"
 
-    # Second 35: YES/NO decision row; corrective steps prompt deferred to 36.
-    assert rows[35]["Voice Command"]    == "YES/NO"
-    assert rows[35]["Student Response"] == "NO"
+    # Second 35: actual response NO; corrective steps prompt deferred to 36.
+    assert rows[35]["Voice Command / Response"] == "NO"
     assert "CORRECTIVE VENTILATION TIMER 30 SEC" in rows[35]["System Action"]
-    assert rows[36]["Voice Command"]    == "FOLLOW VENTILATION CORRECTIVE STEPS"
+    assert rows[36]["Voice Command / Response"] == "FOLLOW VENTILATION CORRECTIVE STEPS"
 
     # Second 65: corrective timer fires AND hr state re-entered
     assert "CORRECTIVE VENTILATION TIMER ALARM" in rows[65]["System Action"]
-    assert rows[65]["Voice Command"] == "IS THE HEART RATE INCREASING"
+    assert rows[65]["Voice Command / Response"] == "IS THE HEART RATE INCREASING"
 
-    # Second 70: loop 2 — YES/NO decision row; corrective steps prompt deferred to 71.
-    assert rows[70]["Voice Command"]    == "YES/NO"
-    assert rows[70]["Student Response"] == "NO"
+    # Second 70: loop 2 — actual response NO; corrective steps prompt deferred to 71.
+    assert rows[70]["Voice Command / Response"] == "NO"
     assert "CORRECTIVE VENTILATION TIMER 30 SEC" in rows[70]["System Action"]
-    assert rows[71]["Voice Command"]    == "FOLLOW VENTILATION CORRECTIVE STEPS"
+    assert rows[71]["Voice Command / Response"] == "FOLLOW VENTILATION CORRECTIVE STEPS"
 
-    # Second 75: YES/NO decision row; simulation_complete is terminal.
-    assert rows[75]["Voice Command"]    == "YES/NO"
-    assert rows[75]["Student Response"] == "YES"
-    assert rows[75]["System Action"]    == "STOP RESUSCITATION PROTOCOL"
+    # Second 75: actual response YES; simulation_complete is terminal.
+    assert rows[75]["Voice Command / Response"] == "YES"
+    assert rows[75]["System Action"]            == "STOP RESUSCITATION PROTOCOL"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -649,9 +641,11 @@ def test_csv_output_unchanged_after_xlsx_addition() -> None:
     assert result.startswith("﻿")
     # Clinical Phase column must NOT appear in CSV
     assert "Clinical Phase" not in result
+    # Student Response column removed — unified into Voice Command / Response
+    assert "Student Response" not in result
     # Correct columns present
     rows = _parse_rows(result)
-    for col in ["Time", "Voice Command", "Student Response", "System Action",
+    for col in ["Time", "Voice Command / Response", "System Action",
                 "Instructor Action", "Notes"]:
         assert col in rows[0]
 

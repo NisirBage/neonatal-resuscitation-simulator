@@ -65,7 +65,12 @@ export interface SpeechRecognitionControls {
   transcript: string;
   // Continuous mode — microphone stays active until stopContinuous() is called
   continuousActive: boolean;
-  startContinuous: (onFinalResult: (text: string) => void) => void;
+  /**
+   * Start continuous recognition.
+   * @param onFinalResult - called with (text, confidence) for every accepted result.
+   *   confidence is in [0, 1]; Chrome SR may return 0 for interim-fallback results.
+   */
+  startContinuous: (onFinalResult: (text: string, confidence: number) => void) => void;
   stopContinuous: () => void;
   // Dev panel — returns current generation counter without triggering re-renders
   getGeneration: () => number;
@@ -86,7 +91,7 @@ function vr(msg: string, data?: Record<string, unknown>): void {
 export function useSpeechRecognition(): SpeechRecognitionControls {
   const recognitionRef        = useRef<BrowserSpeechRecognition | null>(null);
   const continuousActiveRef   = useRef(false);
-  const onFinalResultRef      = useRef<((text: string) => void) | null>(null);
+  const onFinalResultRef      = useRef<((text: string, confidence: number) => void) | null>(null);
   const restartTimerRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Generation counter: incremented by stopContinuous() so that any pending
   // onend handler from the old recognition instance sees a stale generation
@@ -162,7 +167,7 @@ export function useSpeechRecognition(): SpeechRecognitionControls {
   }, []);
 
   const startContinuous = useCallback(
-    (onFinalResult: (text: string) => void) => {
+    (onFinalResult: (text: string, confidence: number) => void) => {
       if (!SpeechRecognitionConstructor) {
         setError("Speech recognition is not available in this browser.");
         return;
@@ -245,7 +250,7 @@ export function useSpeechRecognition(): SpeechRecognitionControls {
                 lastInterim    = "";
                 setTranscript(text);
                 vr(`FINAL transcript="${text}" — invoking callback`);
-                onFinalResultRef.current?.(text);
+                onFinalResultRef.current?.(text, confidence);
               }
             } else {
               // Track interim for the Chrome fallback (see onend below)
@@ -304,7 +309,9 @@ export function useSpeechRecognition(): SpeechRecognitionControls {
             const text = lastInterim;
             lastInterim = "";
             setTranscript(text);
-            onFinalResultRef.current(text);
+            // confidence=0 signals to the reliability layer that this is an
+            // interim fallback — it bypasses the confidence threshold check.
+            onFinalResultRef.current(text, 0);
             // Do NOT restart — the callback manages the next phase.
             return;
           }
