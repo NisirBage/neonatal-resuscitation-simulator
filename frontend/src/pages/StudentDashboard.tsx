@@ -430,10 +430,24 @@ export function StudentDashboard() {
         const _sid = sessionIdRef.current;
         const textAct = primaryTextAction(_ts);
         if (textAct && !busyRef.current && _sid) {
-          vlog("MIC", `text action — submitting raw transcript: "${rawText}"`);
-          stopContinuous();
-          setVoicePhase("processing");
-          void submitResponse(_sid, textAct.id, rawText);
+          const synonyms = textAct.metadata.text_synonyms as string[] | undefined;
+          if (synonyms && synonyms.length > 0) {
+            const matched = synonyms.find((s) => rawText.toLowerCase().includes(s));
+            if (!matched) {
+              vlog("MIC", `text action — no synonym match in "${rawText}", continuing to listen`);
+              return;
+            }
+            const normalized = synonyms[0];
+            vlog("MIC", `text action — matched "${matched}" → normalizing to "${normalized}"`);
+            stopContinuous();
+            setVoicePhase("processing");
+            void submitResponse(_sid, textAct.id, normalized);
+          } else {
+            vlog("MIC", `text action — submitting raw transcript: "${rawText}"`);
+            stopContinuous();
+            setVoicePhase("processing");
+            void submitResponse(_sid, textAct.id, rawText);
+          }
           return;
         }
       }
@@ -601,7 +615,22 @@ export function StudentDashboard() {
       }
       return;
     }
-    speakThenListen(voicePrompt(currentState));
+    // Multi-part TTS: speak intro, wait, then speak main prompt and listen
+    // (e.g. heart_rate_assessment: "Measure heart rate." → 3s → "Is HR > 100?")
+    const parts = currentState.metadata.voice_prompt_parts as string[] | undefined;
+    const partsDelay = typeof currentState.metadata.voice_prompt_parts_delay_ms === "number"
+      ? currentState.metadata.voice_prompt_parts_delay_ms : 0;
+
+    if (parts && parts.length >= 2) {
+      vlog("TTS", `multi-part speak: "${parts[0]}" → ${partsDelay}ms → "${parts.slice(1).join(" ")}"`);
+      setVoicePhase("speaking");
+      stopContinuous();
+      speak(parts[0], () => {
+        setTimeout(() => speakThenListen(parts.slice(1).join(" ")), partsDelay);
+      });
+    } else {
+      speakThenListen(voicePrompt(currentState));
+    }
   // Only re-run on actual state/session changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentState?.id, sessionId]);
@@ -625,20 +654,40 @@ export function StudentDashboard() {
     [stopContinuous, cancelSpeech, submitResponse, reliability]
   );
 
+  // ── Text action fallback button (DONE / VENTILATION STARTED) ────────────────
+
+  const handleTextButton = useCallback(() => {
+    const state = currentStateRef.current;
+    const sid   = sessionIdRef.current;
+    if (!state || !sid || busyRef.current) return;
+    const action = primaryTextAction(state);
+    if (!action) return;
+    const synonyms = action.metadata.text_synonyms as string[] | undefined;
+    const response = synonyms?.[0] ?? "done";
+    stopContinuous();
+    cancelSpeech();
+    void submitResponse(sid, action.id, response);
+  }, [stopContinuous, cancelSpeech, submitResponse]);
+
   // ── Keyboard shortcuts Y / N — route through the same handleButton path (Part 4) ──
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Only active when manual fallback is visible or in a YES/NO listening state
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (!currentStateRef.current || !sessionIdRef.current || busyRef.current) return;
+      // Text action states: Y triggers DONE/VENTILATION STARTED, no N shortcut
+      if (primaryTextAction(currentStateRef.current)) {
+        if (e.key === "y" || e.key === "Y") { e.preventDefault(); handleTextButton(); }
+        return;
+      }
+      // YES/NO action states: Y/N shortcuts
       if (!hasPrimaryYesNo(currentStateRef.current)) return;
       if (e.key === "y" || e.key === "Y") { e.preventDefault(); handleButton("yes"); }
       if (e.key === "n" || e.key === "N") { e.preventDefault(); handleButton("no"); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleButton]);
+  }, [handleButton, handleTextButton]);
 
   // ── Session management ────────────────────────────────────────────────────
 
@@ -809,8 +858,9 @@ export function StudentDashboard() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const hasYesNo   = hasPrimaryYesNo(currentState);
-  const isComplete = isTerminal(currentState);
+  const hasYesNo    = hasPrimaryYesNo(currentState);
+  const textAction  = primaryTextAction(currentState);
+  const isComplete  = isTerminal(currentState);
   const isVentTimer =
     activeTimer?.id === "ventilation_timer" ||
     activeTimer?.id === "continue_ventilation_timer" ||
@@ -1057,6 +1107,21 @@ export function StudentDashboard() {
                 NO
               </button>
             </div>
+          </div>
+        ) : null}
+
+        {/* Text action fallback button — DONE or VENTILATION STARTED */}
+        {textAction && sessionId && !isComplete ? (
+          <div className="w-full">
+            <button
+              className="w-full rounded-2xl border-2 border-clinical-green bg-clinical-green/20 py-6 text-3xl font-black text-clinical-green transition hover:bg-clinical-green hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+              disabled={busy || !sessionId}
+              onClick={handleTextButton}
+              type="button"
+            >
+              {String(textAction.metadata.fallback_button_label ?? "DONE")}
+              <span className="ml-3 text-base font-normal opacity-60">[Y]</span>
+            </button>
           </div>
         ) : null}
 

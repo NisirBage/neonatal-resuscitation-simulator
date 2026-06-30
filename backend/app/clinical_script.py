@@ -87,7 +87,7 @@ TIMER_ALARM_CSV_LABELS: dict[str, str] = {
 # Verbose alarm labels for the XLSX instructor report.
 TIMER_ALARM_XLSX_LABELS: dict[str, str] = {
     "birth_timer":                   "Birth Timer Reminder (1 minute)",
-    "ventilation_timer":             "Ventilation Timer Reminder (30 seconds)",
+    "ventilation_timer":             "Ventilation Timer Reminder (35 seconds)",
     "continue_ventilation_timer":    "15 Second Heart Rate Reminder",
     "corrective_ventilation_timer":  "Corrective Ventilation Reminder (30 seconds)",
     "heart_rate_reassessment_timer": "Heart Rate Reassessment Reminder",
@@ -99,7 +99,7 @@ TIMER_ALARM_XLSX_LABELS: dict[str, str] = {
 TIMER_STARTED_LABELS: dict[str, str] = {
     "birth_timer":                   "BIRTH TIMER STARTED",
     "baby_born_delay_timer":         "",  # internal 15-second delay, not shown in timeline
-    "ventilation_timer":             "VENTILATION TIMER 30 SEC",
+    "ventilation_timer":             "VENTILATION TIMER 35 SEC",
     "continue_ventilation_timer":    "CONTINUE VENTILATION TIMER STARTED",
     "corrective_ventilation_timer":  "CORRECTIVE VENTILATION TIMER 30 SEC",
     "heart_rate_reassessment_timer": "HEART RATE REASSESSMENT TIMER STARTED",

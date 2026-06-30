@@ -27,7 +27,7 @@
         },
         {
           "id": "baby_born_delay_timer",
-          "duration_seconds": 15,
+          "duration_seconds": 5,
           "event": "baby_born_delay_elapsed",
           "auto_start": true,
           "metadata": { "label": "Birth announcement delay" }
@@ -64,20 +64,37 @@
       "actions": [
         {
           "id": "placed_on_chest",
-          "type": "yes_no",
-          "prompt": "Have you placed the baby on the mother's abdomen?",
-          "options": ["yes", "no"],
-          "metadata": { "role": "student" }
+          "type": "text",
+          "prompt": "Say 'Done' to confirm placement.",
+          "options": [],
+          "metadata": {
+            "role": "student",
+            "fallback_button_label": "DONE",
+            "text_synonyms": [
+              "done",
+              "completed",
+              "finished",
+              "placed",
+              "ok",
+              "okay",
+              "done sir",
+              "completed sir",
+              "done ma'am",
+              "completed ma'am",
+              "done doctor",
+              "completed doctor"
+            ]
+          }
         }
       ],
       "timers": [],
       "transitions": [
         {
-          "id": "chest_placement_done",
+          "id": "placement_done",
           "trigger": "action",
           "target_state": "crying_assessment",
           "action_id": "placed_on_chest",
-          "expected_response": "yes"
+          "text_match": "done"
         },
         {
           "id": "instructor_advance_to_crying",
@@ -172,7 +189,9 @@
       "name": "Heart Rate Assessment",
       "description": "Measure heart rate. Is it greater than 100 bpm?",
       "metadata": {
-        "voice_prompt": "Measure heart rate. Is the heart rate greater than 100 beats per minute?"
+        "voice_prompt": "Measure heart rate. Is the heart rate greater than 100 beats per minute?",
+        "voice_prompt_parts": ["Measure heart rate.", "Is the heart rate greater than 100 beats per minute?"],
+        "voice_prompt_parts_delay_ms": 3000
       },
       "actions": [
         {
@@ -226,7 +245,11 @@
           "type": "text",
           "prompt": "Say 'Ventilation started' to confirm.",
           "options": [],
-          "metadata": { "intervention": "ventilation" }
+          "metadata": {
+            "intervention": "ventilation",
+            "fallback_button_label": "VENTILATION STARTED",
+            "text_synonyms": ["ventilation"]
+          }
         }
       ],
       "timers": [],
@@ -265,7 +288,7 @@
       "timers": [
         {
           "id": "ventilation_timer",
-          "duration_seconds": 30,
+          "duration_seconds": 35,
           "event": "ventilation_timer_elapsed",
           "auto_start": true,
           "metadata": { "label": "Ventilation timer" }
