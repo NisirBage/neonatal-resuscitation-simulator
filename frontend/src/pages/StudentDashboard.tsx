@@ -113,8 +113,16 @@ function playAlarmBeep(frequency: number, duration: number, count: number): void
   }
 }
 
-// States that have an active ventilation countdown timer
+// States that have an active ventilation countdown reminder timer
 const VENT_TIMER_STATES = new Set(["ventilation_in_progress", "ventilation_corrective_steps", "continue_ventilation_15s"]);
+
+// All states that belong to the active ventilation phase (for the continuous elapsed timer)
+const VENT_PHASE_STATES = new Set([
+  "ventilation_in_progress",
+  "heart_rate_after_ventilation",
+  "ventilation_corrective_steps",
+  "continue_ventilation_15s",
+]);
 
 function hasPrimaryYesNo(state: CurrentState | null): boolean {
   if (!state) return false;
@@ -162,9 +170,11 @@ export function StudentDashboard() {
   const [exportingXlsx, setExportingXlsx]           = useState(false);
 
   // Voice UI state
-  const [voicePhase, setVoicePhase]         = useState<VoicePhase>("idle");
-  const [lastRecognized, setLastRecognized] = useState("");
-  const [lastConfidence, setLastConfidence] = useState<number | null>(null);
+  const [voicePhase, setVoicePhase]           = useState<VoicePhase>("idle");
+  const [lastRecognized, setLastRecognized]   = useState("");
+  const [lastConfidence, setLastConfidence]   = useState<number | null>(null);
+  // null = no input yet in this state; true = last input was valid; false = invalid
+  const [voiceInputValid, setVoiceInputValid] = useState<boolean | null>(null);
   // Dev panel metrics (only rendered when NRS_DEV=1 in localStorage)
   const [lastHttpStatus, setLastHttpStatus] = useState<number | null>(null);
 
@@ -172,6 +182,10 @@ export function StudentDashboard() {
   const [birthElapsed, setBirthElapsed]   = useState(0);
   const sessionStartRef                   = useRef<number | null>(null);
   const lastMinuteAnnouncedRef            = useRef(-1);
+
+  // Continuous ventilation elapsed clock
+  const [ventElapsed, setVentElapsed] = useState(0);
+  const ventStartRef                  = useRef<number | null>(null);
 
   // Stable refs
   const sessionIdRef    = useRef<string | null>(null);
@@ -268,6 +282,37 @@ export function StudentDashboard() {
     }, 1000);
     return () => clearInterval(iv);
   }, [sessionId]);
+
+  // ── Continuous ventilation elapsed clock ─────────────────────────────────
+  // Starts when entering any ventilation phase state, persists across transitions
+  // within the phase, stops and resets when leaving the phase or on new session.
+
+  useEffect(() => {
+    if (!sessionId) {
+      ventStartRef.current = null;
+      setVentElapsed(0);
+      return;
+    }
+    const inVentPhase = currentState ? VENT_PHASE_STATES.has(currentState.id) : false;
+    if (!inVentPhase) {
+      if (ventStartRef.current !== null) {
+        ventStartRef.current = null;
+        setVentElapsed(0);
+      }
+      return;
+    }
+    // First entry into the ventilation phase: record start time
+    if (ventStartRef.current === null) {
+      ventStartRef.current = Date.now();
+      setVentElapsed(0);
+    }
+    const iv = setInterval(() => {
+      if (ventStartRef.current !== null) {
+        setVentElapsed(Math.floor((Date.now() - ventStartRef.current) / 1000));
+      }
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [currentState?.id, sessionId]);
 
   // ── Birth timer: alarm beep + announce every minute ──────────────────────
   // Audible 2-beep alarm fires at every 60-second boundary regardless of voice phase.
@@ -435,15 +480,18 @@ export function StudentDashboard() {
             const matched = synonyms.find((s) => rawText.toLowerCase().includes(s));
             if (!matched) {
               vlog("MIC", `text action — no synonym match in "${rawText}", continuing to listen`);
+              setVoiceInputValid(false);
               return;
             }
             const normalized = synonyms[0];
             vlog("MIC", `text action — matched "${matched}" → normalizing to "${normalized}"`);
+            setVoiceInputValid(true);
             stopContinuous();
             setVoicePhase("processing");
             void submitResponse(_sid, textAct.id, normalized);
           } else {
             vlog("MIC", `text action — submitting raw transcript: "${rawText}"`);
+            setVoiceInputValid(true);
             stopContinuous();
             setVoicePhase("processing");
             void submitResponse(_sid, textAct.id, rawText);
@@ -476,6 +524,7 @@ export function StudentDashboard() {
 
       if (action.type === "manual_fallback") {
         vlog("MIC", `MAX_RETRIES exhausted — showing manual fallback`);
+        setVoiceInputValid(false);
         stopContinuous();
         setVoicePhase("idle");
         speak("Please use the YES or NO buttons to answer.", undefined);
@@ -501,6 +550,7 @@ export function StudentDashboard() {
           ? "I couldn't hear that clearly. Please answer yes or no."
           : "I didn't understand. Please answer yes or no.";
         vlog("MIC", `retry #${action.retryNumber}: ${action.reason}`);
+        setVoiceInputValid(false);
         stopContinuous();
         setVoicePhase("speaking");
         speak(msg, restartListening);
@@ -538,6 +588,7 @@ export function StudentDashboard() {
       // action.type === "accept"
       const { normalised } = action;
       vlog("MIC", `normalised → ${normalised.toUpperCase()} (confidence=${confidence.toFixed(2)})`);
+      setVoiceInputValid(true);
       setLastRecognized(normalised);
 
       const state = currentStateRef.current;
@@ -587,6 +638,7 @@ export function StudentDashboard() {
       cancelSpeech();
       setVoicePhase("idle");
       setLastRecognized("");
+      setVoiceInputValid(null);
       return;
     }
 
@@ -598,9 +650,10 @@ export function StudentDashboard() {
     }
 
     vlog("FSM", `state entered: ${currentState.id}`, { name: currentState.name, prev: prevStateId });
-    // Reset reliability state on every new FSM state (Parts 3, 4, 9)
+    // Reset reliability and voice input tracking on every new FSM state
     reliability.resetForNewState();
     attemptRef.current = 0;
+    setVoiceInputValid(null);
 
     if (isTerminal(currentState)) {
       stopContinuous();
@@ -858,10 +911,11 @@ export function StudentDashboard() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const hasYesNo    = hasPrimaryYesNo(currentState);
-  const textAction  = primaryTextAction(currentState);
-  const isComplete  = isTerminal(currentState);
-  const isVentTimer =
+  const hasYesNo     = hasPrimaryYesNo(currentState);
+  const textAction   = primaryTextAction(currentState);
+  const isComplete   = isTerminal(currentState);
+  const isVentPhase  = currentState ? VENT_PHASE_STATES.has(currentState.id) : false;
+  const isVentTimer  =
     activeTimer?.id === "ventilation_timer" ||
     activeTimer?.id === "continue_ventilation_timer" ||
     activeTimer?.id === "corrective_ventilation_timer";
@@ -877,6 +931,29 @@ export function StudentDashboard() {
     : voicePhase === "complete"    ? "Simulation complete"
     : sessionId                    ? "Ready"
     :                                "Start a session";
+
+  // Voice status indicator — four states derived from voice phase, validity, and mic health.
+  // BLUE:   system is speaking (mic intentionally paused)
+  // GREEN:  listening and ready, or last input was valid
+  // YELLOW: last recognised input was invalid for the current state
+  // RED:    mic unavailable, circuit open, or fallback active
+  type VoiceStatusColor = "red" | "green" | "yellow" | "blue";
+  const voiceStatusColor: VoiceStatusColor | null = (() => {
+    if (!sessionId) return null;
+    if (!micSupported || !!micError || reliability.circuitOpen || reliability.showManualFallback) return "red";
+    if (voicePhase === "idle" || voicePhase === "complete") return null;
+    if (voicePhase === "speaking" || voicePhase === "confirming") return "blue";
+    // listening or processing: YELLOW only after a confirmed invalid utterance
+    if (voiceInputValid === false) return "yellow";
+    return "green"; // null (no input yet) or true (valid) → show as Listening/valid
+  })();
+
+  const voiceStatusLabel =
+    voiceStatusColor === "blue"   ? "Voice Status: Speaking"
+    : voiceStatusColor === "green"  ? "Voice Status: Listening"
+    : voiceStatusColor === "yellow" ? "Voice Status: Input Not Recognized"
+    : voiceStatusColor === "red"    ? "Voice Status: Voice Unavailable"
+    : "Voice Status: inactive";
 
   const micRingClass =
     voicePhase === "listening"
@@ -1006,6 +1083,18 @@ export function StudentDashboard() {
           </div>
         ) : null}
 
+        {/* Continuous Ventilation Elapsed Timer */}
+        {sessionId && isVentPhase ? (
+          <div className="rounded-xl border border-clinical-green/30 bg-clinical-green/10 p-4 text-center w-full">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-clinical-green">
+              Ventilation Elapsed
+            </p>
+            <p className="mt-1 text-4xl font-bold tabular-nums tracking-tight text-clinical-green">
+              {formatMMSS(ventElapsed)}
+            </p>
+          </div>
+        ) : null}
+
         {/* Current instruction */}
         <div className="w-full rounded-2xl border border-white/10 bg-white/5 px-8 py-8 text-center">
           {currentState ? (
@@ -1038,13 +1127,23 @@ export function StudentDashboard() {
           </div>
           <p className="text-sm font-medium text-slate-400">{micLabel}</p>
           {micError ? <p className="text-xs text-rose-400 text-center max-w-xs">{micError}</p> : null}
-          {lastRecognized ? (
-            <div className="rounded-xl border border-white/10 bg-white/5 px-8 py-3 text-center min-w-40">
+          {voiceStatusColor ? (
+            <div className="flex flex-col items-center gap-1.5">
+              <div
+                aria-label={voiceStatusLabel}
+                className={`h-5 w-5 rounded-full transition-colors duration-300 ${
+                  voiceStatusColor === "blue"   ? "bg-blue-400"
+                  : voiceStatusColor === "green"  ? "bg-emerald-400"
+                  : voiceStatusColor === "yellow" ? "bg-amber-400"
+                  : "bg-rose-500"
+                }`}
+                role="status"
+              />
               <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-                Recognized
-              </p>
-              <p className="mt-1 text-2xl font-black tracking-wide">
-                &ldquo;{lastRecognized.toUpperCase()}&rdquo;
+                {voiceStatusColor === "blue"   ? "Speaking"
+                : voiceStatusColor === "green"  ? "Listening"
+                : voiceStatusColor === "yellow" ? "Input Not Recognized"
+                : "Voice Unavailable"}
               </p>
             </div>
           ) : null}
