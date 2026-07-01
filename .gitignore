@@ -67,4 +67,4 @@ frontend/tsconfig.tsbuildinfo
 
 # Local QA scripts
 cdp_*.py
-qa_*.py
+qa_*.py.claude/
