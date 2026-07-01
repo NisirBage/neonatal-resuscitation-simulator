@@ -49,6 +49,7 @@ export interface SessionResponse {
   scenario_id: string;
   status: string;
   current_state: CurrentState;
+  corrective_ventilation_cycles?: number;
 }
 
 export interface SessionStateResponse extends SessionResponse {

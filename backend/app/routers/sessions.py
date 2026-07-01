@@ -80,6 +80,7 @@ class SessionResponse(BaseModel):
     scenario_id: str
     status: str
     current_state: CurrentStateResponse
+    corrective_ventilation_cycles: int = 0
 
 
 class SessionListItem(BaseModel):
@@ -507,12 +508,21 @@ def _load_scenario_by_id(scenario_id: str) -> Scenario:
     )
 
 
+def _count_corrective_cycles(history: list[SimulationEvent]) -> int:
+    return sum(
+        1 for e in history
+        if e.type == "state_transition" and e.transition_id == "corrective_ventilation_timer_done"
+    )
+
+
 def _build_session_response(record: SessionRecord) -> SessionResponse:
+    history = record.engine.get_history()
     return SessionResponse(
         session_id=record.session_id,
         scenario_id=record.scenario.id,
         status=record.status,
         current_state=_build_current_state_response(record.engine.get_current_state()),
+        corrective_ventilation_cycles=_count_corrective_cycles(history),
     )
 
 
@@ -527,12 +537,14 @@ def _get_active_record(session_id: UUID) -> SessionRecord:
 
 
 def _build_session_state_response(record: SessionRecord) -> SessionStateResponse:
+    history = record.engine.get_history()
     return SessionStateResponse(
         session_id=record.session_id,
         scenario_id=record.scenario.id,
         status=record.status,
         current_state=_build_current_state_response(record.engine.get_current_state()),
-        history=record.engine.get_history(),
+        history=history,
+        corrective_ventilation_cycles=_count_corrective_cycles(history),
     )
 
 

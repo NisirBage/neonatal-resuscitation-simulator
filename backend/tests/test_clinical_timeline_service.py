@@ -449,7 +449,7 @@ def test_corrective_ventilation_loop_repeated_prompts() -> None:
     # Second 35: actual response NO; corrective steps prompt deferred to 36.
     assert rows[35]["Voice Command / Response"] == "NO"
     assert "CORRECTIVE VENTILATION TIMER 30 SEC" in rows[35]["System Action"]
-    assert rows[36]["Voice Command / Response"] == "FOLLOW VENTILATION CORRECTIVE STEPS"
+    assert rows[36]["Voice Command / Response"] == "FOLLOW VENTILATION CORRECTIVE STEPS AND MEASURE HEART RATE EVERY 15 SECONDS"
 
     # Second 65: corrective timer fires AND hr state re-entered
     assert "CORRECTIVE VENTILATION TIMER ALARM" in rows[65]["System Action"]
@@ -458,7 +458,7 @@ def test_corrective_ventilation_loop_repeated_prompts() -> None:
     # Second 70: loop 2 — actual response NO; corrective steps prompt deferred to 71.
     assert rows[70]["Voice Command / Response"] == "NO"
     assert "CORRECTIVE VENTILATION TIMER 30 SEC" in rows[70]["System Action"]
-    assert rows[71]["Voice Command / Response"] == "FOLLOW VENTILATION CORRECTIVE STEPS"
+    assert rows[71]["Voice Command / Response"] == "FOLLOW VENTILATION CORRECTIVE STEPS AND MEASURE HEART RATE EVERY 15 SECONDS"
 
     # Second 75: actual response YES; simulation_complete is terminal.
     assert rows[75]["Voice Command / Response"] == "YES"

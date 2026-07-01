@@ -127,7 +127,7 @@ test.describe("Error handling", () => {
     await page.click("button:has-text('Start')");
 
     await expect(
-      page.locator("[class*='bg-rose-950']").first()
+      page.locator("[class*='bg-red-50']").first()
     ).toBeVisible({ timeout: 6_000 });
   });
 
@@ -145,11 +145,11 @@ test.describe("Error handling", () => {
 
     await page.click("button:has-text('Start')");
 
-    // The error banner should appear — match bg-rose-950 (the error banner, not the WS badge)
-    await expect(page.locator("[class*='bg-rose-950']").first()).toBeVisible({ timeout: 6_000 });
+    // The error banner should appear — match bg-red-50 (the error banner, not the WS badge)
+    await expect(page.locator("[class*='bg-red-50']").first()).toBeVisible({ timeout: 6_000 });
 
     // Dismiss it
     await page.click("button:has-text('Dismiss')");
-    await expect(page.locator("[class*='bg-rose-950']").first()).not.toBeVisible({ timeout: 4_000 });
+    await expect(page.locator("[class*='bg-red-50']").first()).not.toBeVisible({ timeout: 4_000 });
   });
 });

@@ -256,6 +256,19 @@ def generate_clinical_csv(
         elif event.type == "no_transition":
             _row_at_offset(s).notes = "Input not recognised"
 
+    # Annotate last corrective cycle timer row with total cycle count
+    corrective_cycles = sum(
+        1 for e in history
+        if e.type == "state_transition" and e.transition_id == "corrective_ventilation_timer_done"
+    )
+    if corrective_cycles > 0:
+        for event in reversed(history):
+            if event.type == "state_transition" and event.transition_id == "corrective_ventilation_timer_done":
+                _row_at_offset(_offset(event.timestamp)).notes = (
+                    f"Corrective ventilation cycles: {corrective_cycles}"
+                )
+                break
+
     # ── Phase 3: EMIT ─────────────────────────────────────────────────────────
     buffer = io.StringIO()
     buffer.write("﻿")  # UTF-8 BOM for Excel compatibility
@@ -414,6 +427,19 @@ def _build_xlsx_timeline(
                 row.clinical_phase = phase_map.get(
                     event.state_id, clinical_script.get_clinical_phase(event.state_id)
                 )
+
+    # Annotate last corrective cycle timer row with total cycle count
+    corrective_cycles = sum(
+        1 for e in history
+        if e.type == "state_transition" and e.transition_id == "corrective_ventilation_timer_done"
+    )
+    if corrective_cycles > 0:
+        for event in reversed(history):
+            if event.type == "state_transition" and event.transition_id == "corrective_ventilation_timer_done":
+                offset = max(0, int((event.timestamp - t0).total_seconds()))
+                if offset in acc:
+                    acc[offset].notes = f"Corrective ventilation cycles: {corrective_cycles}"
+                break
 
     result: list[_XlsxRow] = []
     last_phase = clinical_script.get_clinical_phase(scenario.initial_state)

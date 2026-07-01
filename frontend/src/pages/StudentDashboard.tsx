@@ -113,14 +113,15 @@ function playAlarmBeep(frequency: number, duration: number, count: number): void
   }
 }
 
-// States that have an active ventilation countdown reminder timer
-const VENT_TIMER_STATES = new Set(["ventilation_in_progress", "ventilation_corrective_steps", "continue_ventilation_15s"]);
+// States that trigger the ventilation-timer-alarm beep when leaving them
+const VENT_TIMER_STATES = new Set(["ventilation_in_progress", "ventilation_corrective_buffer", "continue_ventilation_15s"]);
 
-// All states that belong to the active ventilation phase (for the continuous elapsed timer)
+// All states that belong to the active ventilation phase (continuous elapsed timer + summary)
 const VENT_PHASE_STATES = new Set([
   "ventilation_in_progress",
   "heart_rate_after_ventilation",
   "ventilation_corrective_steps",
+  "ventilation_corrective_buffer",
   "continue_ventilation_15s",
 ]);
 
@@ -183,9 +184,20 @@ export function StudentDashboard() {
   const sessionStartRef                   = useRef<number | null>(null);
   const lastMinuteAnnouncedRef            = useRef(-1);
 
-  // Continuous ventilation elapsed clock
-  const [ventElapsed, setVentElapsed] = useState(0);
-  const ventStartRef                  = useRef<number | null>(null);
+  // Continuous ventilation elapsed clock + frozen summary (CHANGE 4)
+  const [ventElapsed, setVentElapsed]             = useState(0);
+  const ventStartRef                              = useRef<number | null>(null);
+  const [ventStartWallTime, setVentStartWallTime] = useState<string | null>(null);
+  const [ventEndWallTime, setVentEndWallTime]     = useState<string | null>(null);
+  const [ventFrozenElapsed, setVentFrozenElapsed] = useState<number | null>(null);
+  const [ventFrozenCycles, setVentFrozenCycles]   = useState<number | null>(null);
+  const corrCyclesRef                             = useRef<number>(0);
+
+  // Birth start wall-clock time (CHANGE 5)
+  const [birthStartWallTime, setBirthStartWallTime] = useState<string | null>(null);
+
+  // Pending birth alarm — deferred when TTS is speaking (CHANGE 6)
+  const pendingBirthAlarmRef = useRef(false);
 
   // Stable refs
   const sessionIdRef    = useRef<string | null>(null);
@@ -272,11 +284,16 @@ export function StudentDashboard() {
   useEffect(() => {
     if (!sessionId) {
       setBirthElapsed(0);
+      setBirthStartWallTime(null);
       sessionStartRef.current = null;
       lastMinuteAnnouncedRef.current = -1;
+      pendingBirthAlarmRef.current = false;
       return;
     }
     sessionStartRef.current = Date.now();
+    setBirthStartWallTime(
+      new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    );
     const iv = setInterval(() => {
       setBirthElapsed(Math.floor((Date.now() - (sessionStartRef.current ?? Date.now())) / 1000));
     }, 1000);
@@ -291,11 +308,23 @@ export function StudentDashboard() {
     if (!sessionId) {
       ventStartRef.current = null;
       setVentElapsed(0);
+      setVentStartWallTime(null);
+      setVentEndWallTime(null);
+      setVentFrozenElapsed(null);
+      setVentFrozenCycles(null);
+      corrCyclesRef.current = 0;
       return;
     }
     const inVentPhase = currentState ? VENT_PHASE_STATES.has(currentState.id) : false;
     if (!inVentPhase) {
       if (ventStartRef.current !== null) {
+        // Leaving ventilation phase — freeze the summary
+        const elapsed = Math.floor((Date.now() - ventStartRef.current) / 1000);
+        setVentFrozenElapsed(elapsed);
+        setVentFrozenCycles(corrCyclesRef.current);
+        setVentEndWallTime(
+          new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+        );
         ventStartRef.current = null;
         setVentElapsed(0);
       }
@@ -305,6 +334,12 @@ export function StudentDashboard() {
     if (ventStartRef.current === null) {
       ventStartRef.current = Date.now();
       setVentElapsed(0);
+      setVentFrozenElapsed(null);
+      setVentFrozenCycles(null);
+      setVentEndWallTime(null);
+      setVentStartWallTime(
+        new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      );
     }
     const iv = setInterval(() => {
       if (ventStartRef.current !== null) {
@@ -314,30 +349,32 @@ export function StudentDashboard() {
     return () => clearInterval(iv);
   }, [currentState?.id, sessionId]);
 
-  // ── Birth timer: alarm beep + announce every minute ──────────────────────
-  // Audible 2-beep alarm fires at every 60-second boundary regardless of voice phase.
-  // Voice announcement only interrupts when listening.
+  // ── Birth timer: alarm beep every minute (CHANGE 6) ─────────────────────
+  // Audible alarm fires at every 60-second boundary.
+  // If TTS is currently speaking, the alarm is deferred until speech ends.
+  // No spoken announcement — the beep alone signals the minute boundary.
 
   useEffect(() => {
     if (!sessionId || birthElapsed === 0) return;
-    // Audible alarm on every 60-second boundary
-    if (birthElapsed % 60 === 0) {
-      playAlarmBeep(880, 0.25, 2);
-    }
+    if (birthElapsed % 60 !== 0) return;
     const mins = Math.floor(birthElapsed / 60);
     if (mins <= 0 || mins === lastMinuteAnnouncedRef.current) return;
-    if (voicePhaseRef.current !== "listening") return;
     lastMinuteAnnouncedRef.current = mins;
-    vlog("TIMER", `birth timer: ${mins} min — announcing`);
-    stopContinuous();
-    speak(`${mins} minute${mins !== 1 ? "s" : ""} since birth.`, () => {
-      const _s = currentStateRef.current;
-      if (sessionIdRef.current && (hasPrimaryYesNo(_s) || !!primaryTextAction(_s))) {
-        setVoicePhase("listening");
-        startContinuous(stableProxy);
-      }
-    });
-  }, [birthElapsed, sessionId, speak, stopContinuous, startContinuous, stableProxy]);
+    vlog("TIMER", `birth timer: ${mins} min — alarm`);
+    if (voicePhaseRef.current === "speaking") {
+      pendingBirthAlarmRef.current = true;
+    } else {
+      playAlarmBeep(880, 0.25, 2);
+    }
+  }, [birthElapsed, sessionId]);
+
+  // Play deferred birth alarm as soon as TTS finishes
+  useEffect(() => {
+    if (voicePhase !== "speaking" && pendingBirthAlarmRef.current) {
+      pendingBirthAlarmRef.current = false;
+      playAlarmBeep(880, 0.25, 2);
+    }
+  }, [voicePhase]);
 
   // ── Cleanup on unmount ────────────────────────────────────────────────────
 
@@ -392,6 +429,7 @@ export function StudentDashboard() {
         const session = await submitStudentInput(sid, actionId, response);
         setLastHttpStatus(200);
         vlog("FSM", `transitioned to state: ${session.current_state.id}`, { name: session.current_state.name });
+        corrCyclesRef.current = session.corrective_ventilation_cycles ?? 0;
         setCurrentState(session.current_state);
         if (session.current_state.id === prevStateId) {
           // FSM produced no_transition — state ID unchanged so the voice loop effect
@@ -749,6 +787,7 @@ export function StudentDashboard() {
     try {
       const session = await getSession(targetSid);
       if (activeSessionRef.current !== targetSid || refreshSeqRef.current !== seq) return;
+      corrCyclesRef.current = session.corrective_ventilation_cycles ?? 0;
       setCurrentState(session.current_state);
     } catch (err: unknown) {
       if (activeSessionRef.current !== targetSid) return;
@@ -808,6 +847,7 @@ export function StudentDashboard() {
       const session = await startSession(scenarioId);
       vlog("SESSION", `started: session_id=${session.session_id} initial_state=${session.current_state.id}`);
       activeSessionRef.current = session.session_id;
+      corrCyclesRef.current = 0;
       setSessionId(session.session_id);
       setCurrentState(session.current_state);
       connectWS(session.session_id);
@@ -957,42 +997,42 @@ export function StudentDashboard() {
 
   const micRingClass =
     voicePhase === "listening"
-      ? "bg-clinical-green shadow-[0_0_0_8px_rgba(13,148,136,0.25),0_0_0_18px_rgba(13,148,136,0.1)] animate-pulse"
+      ? "bg-emerald-500 shadow-[0_0_0_10px_rgba(16,185,129,0.25),0_0_0_22px_rgba(16,185,129,0.12)] animate-pulse"
     : voicePhase === "speaking"
-      ? "bg-clinical-blue shadow-[0_0_0_6px_rgba(37,99,235,0.15)]"
+      ? "bg-cyan-500 shadow-[0_0_0_10px_rgba(6,182,212,0.22),0_0_0_22px_rgba(6,182,212,0.1)]"
     : voicePhase === "processing"
-      ? "bg-amber-500"
+      ? "bg-amber-500 shadow-[0_0_0_10px_rgba(245,158,11,0.2)]"
     : voicePhase === "complete"
-      ? "bg-emerald-600"
-    : "bg-slate-700";
+      ? "bg-emerald-600 shadow-[0_0_0_10px_rgba(5,150,105,0.2)]"
+    : "bg-slate-300";
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white flex flex-col">
+    <main className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
 
       {/* Header */}
-      <header className="flex-shrink-0 border-b border-white/10 bg-slate-900">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <header className="flex-shrink-0 border-b border-slate-200 bg-white shadow-sm">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
 
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-clinical-green">
-              <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 shadow-sm">
+              <svg className="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-clinical-green leading-none">
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-600 leading-none">
                 NRS Voice Assistant
               </p>
-              <p className="text-sm font-semibold leading-tight">Neonatal Resuscitation</p>
+              <p className="text-base font-bold leading-tight text-slate-900">Neonatal Resuscitation</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             <ConnectionStatusBadge websocketStatus={wsStatus} />
             <select
-              className="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none focus:border-clinical-green disabled:opacity-50"
+              className="rounded-lg border-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-600 disabled:opacity-50"
               disabled={busy || Boolean(sessionId)}
               onChange={(e) => setScenarioId(e.target.value)}
               value={scenarioId}
@@ -1002,7 +1042,7 @@ export function StudentDashboard() {
                 : scenarios.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <button
-              className="rounded bg-clinical-green px-4 py-1.5 text-sm font-semibold text-white hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-50 transition"
+              className="rounded-lg bg-blue-600 px-5 py-2.5 text-base font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 transition"
               disabled={busy}
               onClick={() => void handleStart()}
               type="button"
@@ -1010,7 +1050,7 @@ export function StudentDashboard() {
               {sessionId ? "Restart" : "Start"}
             </button>
             <button
-              className="rounded border border-white/20 px-4 py-1.5 text-sm font-semibold hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 transition"
+              className="rounded-lg border-2 border-slate-300 px-5 py-2.5 text-base font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 transition"
               disabled={busy || !sessionId}
               onClick={() => void handleStop()}
               type="button"
@@ -1022,19 +1062,19 @@ export function StudentDashboard() {
       </header>
 
       {/* Body */}
-      <div className="flex-1 flex flex-col gap-5 items-center px-4 py-6 sm:px-6 max-w-3xl mx-auto w-full">
+      <div className="flex-1 flex flex-col gap-6 items-center px-4 py-8 sm:px-6 max-w-4xl mx-auto w-full">
 
         {wsStatus === "reconnecting" && (
-          <div className="w-full rounded-lg border border-amber-500/30 bg-amber-950/50 px-4 py-2 text-sm text-amber-300 text-center">
-            Connection lost — attempting to reconnect…
+          <div className="w-full rounded-xl border-2 border-amber-300 bg-amber-50 px-5 py-3 text-base font-semibold text-amber-800 text-center">
+            ⚠ Connection lost — attempting to reconnect…
           </div>
         )}
 
         {error ? (
-          <div className="w-full rounded-lg border border-rose-500/30 bg-rose-950/50 px-4 py-3 text-sm text-rose-300 flex items-start justify-between gap-3">
-            <span>{error}</span>
+          <div className="w-full rounded-xl border-2 border-red-300 bg-red-50 px-5 py-4 text-base text-red-800 flex items-start justify-between gap-3">
+            <span className="font-medium">{error}</span>
             <button
-              className="shrink-0 text-rose-400 hover:text-rose-200 transition text-xs underline"
+              className="shrink-0 text-red-600 hover:text-red-800 transition text-sm font-bold underline"
               onClick={() => setError(null)}
               type="button"
             >
@@ -1045,73 +1085,107 @@ export function StudentDashboard() {
 
         {/* Timers */}
         {sessionId ? (
-          <div className="grid grid-cols-2 gap-3 w-full">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+          <div className="grid grid-cols-2 gap-4 w-full">
+            <div className="rounded-2xl border-2 border-blue-200 bg-blue-50 p-6 text-center shadow-sm">
+              <p className="text-sm font-bold uppercase tracking-widest text-blue-600">
                 Birth Timer
               </p>
-              <p className="mt-1 text-4xl font-bold tabular-nums tracking-tight">
+              <p className="mt-2 text-5xl font-black tabular-nums tracking-tight text-slate-900">
                 {formatMMSS(birthElapsed)}
               </p>
+              {birthStartWallTime ? (
+                <>
+                  <p className="mt-3 text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Started At
+                  </p>
+                  <p className="text-base font-mono font-semibold text-slate-600">{birthStartWallTime}</p>
+                </>
+              ) : null}
             </div>
-            <div className={`rounded-xl border p-4 transition ${isVentTimer ? "border-amber-500/40 bg-amber-950/30" : "border-white/10 bg-white/5"}`}>
+            <div className={`rounded-2xl border-2 p-6 text-center transition shadow-sm ${isVentTimer ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white"}`}>
               {isVentTimer && activeTimer ? (
-                <div className="space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-400">
+                <div className="space-y-3">
+                  <p className="text-sm font-bold uppercase tracking-widest text-amber-600">
                     {activeTimer.label}
                   </p>
-                  <p className="text-3xl font-bold tabular-nums tracking-tight text-amber-200">
+                  <p className="text-4xl font-black tabular-nums tracking-tight text-amber-700">
                     {formatMMSS(activeTimer.remainingSeconds)}
                   </p>
-                  <div className="h-1 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-2 overflow-hidden rounded-full bg-amber-100">
                     <div
-                      className="h-full rounded-full bg-amber-400 transition-[width] duration-1000 ease-linear"
+                      className="h-full rounded-full bg-amber-500 transition-[width] duration-1000 ease-linear"
                       style={{ width: `${100 - activeTimer.progressPercent}%` }}
                     />
                   </div>
-                  <p className="text-xs text-amber-400/60">{activeTimer.remainingSeconds}s remaining</p>
+                  <p className="text-sm font-semibold text-amber-600">{activeTimer.remainingSeconds}s remaining</p>
                 </div>
               ) : (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+                  <p className="text-sm font-bold uppercase tracking-widest text-slate-400">
                     Ventilation Timer
                   </p>
-                  <p className="mt-1 text-3xl font-bold tabular-nums text-slate-700">--:--</p>
+                  <p className="mt-2 text-4xl font-black tabular-nums text-slate-300">--:--</p>
                 </div>
               )}
             </div>
           </div>
         ) : null}
 
-        {/* Continuous Ventilation Elapsed Timer */}
+        {/* Continuous Ventilation Elapsed Timer / Frozen Summary (CHANGES 2, 4) */}
         {sessionId && isVentPhase ? (
-          <div className="rounded-xl border border-clinical-green/30 bg-clinical-green/10 p-4 text-center w-full">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-clinical-green">
+          <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-6 text-center w-full shadow-sm">
+            <p className="text-sm font-bold uppercase tracking-widest text-emerald-600">
               Ventilation Elapsed
             </p>
-            <p className="mt-1 text-4xl font-bold tabular-nums tracking-tight text-clinical-green">
+            <p className="mt-2 text-5xl font-black tabular-nums tracking-tight text-emerald-700">
               {formatMMSS(ventElapsed)}
             </p>
+          </div>
+        ) : sessionId && ventFrozenElapsed !== null ? (
+          <div className="rounded-2xl border-2 border-slate-200 bg-white p-6 w-full shadow-sm">
+            <p className="text-sm font-bold uppercase tracking-widest text-slate-500 text-center mb-4">
+              🫁 Ventilation Summary
+            </p>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Started</p>
+                <p className="text-base font-mono font-semibold text-slate-700">{ventStartWallTime}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Ended</p>
+                <p className="text-base font-mono font-semibold text-slate-700">{ventEndWallTime}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Duration</p>
+                <p className="text-base font-mono font-black text-slate-900">{formatMMSS(ventFrozenElapsed)}</p>
+              </div>
+            </div>
+            {ventFrozenCycles !== null && ventFrozenCycles > 0 && (
+              <div className="mt-4 pt-4 border-t-2 border-slate-100 text-center">
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Corrective Ventilation Cycles</p>
+                <p className="text-base font-mono font-black text-slate-900">{ventFrozenCycles}</p>
+              </div>
+            )}
           </div>
         ) : null}
 
         {/* Current instruction */}
-        <div className="w-full rounded-2xl border border-white/10 bg-white/5 px-8 py-8 text-center">
+        <div className="w-full rounded-2xl border-2 border-slate-200 border-l-8 border-l-blue-600 bg-white px-8 py-10 text-center shadow-md">
           {currentState ? (
             <>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-clinical-green">
+              <p className="text-sm font-bold uppercase tracking-widest text-blue-600">
                 {currentState.name}
               </p>
-              <h2 className="mt-4 text-2xl sm:text-3xl font-bold leading-snug">
+              <h2 className="mt-4 text-3xl sm:text-4xl font-extrabold leading-snug text-slate-900">
                 {voicePrompt(currentState)}
               </h2>
             </>
           ) : (
             <>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+              <p className="text-sm font-bold uppercase tracking-widest text-slate-400">
                 Ready
               </p>
-              <h2 className="mt-4 text-xl font-semibold text-slate-500">
+              <h2 className="mt-4 text-2xl font-bold text-slate-500">
                 Select a scenario and press Start.
               </h2>
             </>
@@ -1120,26 +1194,26 @@ export function StudentDashboard() {
 
         {/* Microphone indicator */}
         <div className="flex flex-col items-center gap-4">
-          <div className={`h-24 w-24 rounded-full flex items-center justify-center transition-all duration-500 ${micRingClass}`}>
-            <svg className="h-11 w-11 text-white" fill="currentColor" viewBox="0 0 24 24">
+          <div className={`h-28 w-28 rounded-full flex items-center justify-center transition-all duration-500 ${micRingClass}`}>
+            <svg className="h-12 w-12 text-white" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
             </svg>
           </div>
-          <p className="text-sm font-medium text-slate-400">{micLabel}</p>
-          {micError ? <p className="text-xs text-rose-400 text-center max-w-xs">{micError}</p> : null}
+          <p className="text-lg font-semibold text-slate-700">{micLabel}</p>
+          {micError ? <p className="text-sm font-medium text-red-600 text-center max-w-xs">{micError}</p> : null}
           {voiceStatusColor ? (
-            <div className="flex flex-col items-center gap-1.5">
+            <div className="flex items-center gap-3 rounded-full border-2 border-slate-200 bg-white px-5 py-2.5 shadow-sm">
               <div
                 aria-label={voiceStatusLabel}
-                className={`h-5 w-5 rounded-full transition-colors duration-300 ${
-                  voiceStatusColor === "blue"   ? "bg-blue-400"
-                  : voiceStatusColor === "green"  ? "bg-emerald-400"
-                  : voiceStatusColor === "yellow" ? "bg-amber-400"
-                  : "bg-rose-500"
+                className={`h-4 w-4 rounded-full transition-colors duration-300 ${
+                  voiceStatusColor === "blue"   ? "bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.7)]"
+                  : voiceStatusColor === "green"  ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]"
+                  : voiceStatusColor === "yellow" ? "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.7)]"
+                  : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)]"
                 }`}
                 role="status"
               />
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              <p className="text-sm font-bold uppercase tracking-widest text-slate-600">
                 {voiceStatusColor === "blue"   ? "Speaking"
                 : voiceStatusColor === "green"  ? "Listening"
                 : voiceStatusColor === "yellow" ? "Input Not Recognized"
@@ -1151,35 +1225,35 @@ export function StudentDashboard() {
 
         {/* Noise / silence warning (Part 5) — advisory only, never blocks FSM */}
         {voicePhase === "listening" && noiseWarning ? (
-          <div className="w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-400">
+          <div className="w-full rounded-xl border-2 border-amber-300 bg-amber-50 px-5 py-3 text-base font-semibold text-amber-800">
             {noiseWarning}
           </div>
         ) : null}
 
         {/* Manual fallback — shown after MAX_RETRIES or circuit open (Parts 4, 9) */}
         {hasYesNo && sessionId && !isComplete && (reliability.showManualFallback || reliability.circuitOpen) ? (
-          <div className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-4">
-            <p className="mb-3 text-center text-sm font-semibold text-slate-300">
+          <div className="w-full rounded-2xl border-2 border-slate-200 bg-white px-5 py-5 shadow-sm">
+            <p className="mb-4 text-center text-lg font-semibold text-slate-700">
               {reliability.circuitOpen
                 ? "Voice recognition paused. Please answer using the buttons (Y / N)."
                 : "Voice not recognised after several attempts. Please answer using the buttons (Y / N)."}
             </p>
             <div className="grid grid-cols-2 gap-4">
               <button
-                className="rounded-2xl border-2 border-clinical-green bg-clinical-green/20 py-6 text-3xl font-black text-clinical-green transition hover:bg-clinical-green hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded-2xl border-2 border-emerald-500 bg-emerald-50 py-7 text-3xl font-black text-emerald-600 transition hover:bg-emerald-500 hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
                 disabled={busy}
                 onClick={() => handleButton("yes")}
                 type="button"
               >
-                YES <span className="text-base font-normal opacity-60">[Y]</span>
+                YES <span className="text-lg font-semibold opacity-60">[Y]</span>
               </button>
               <button
-                className="rounded-2xl border-2 border-rose-500 bg-rose-500/20 py-6 text-3xl font-black text-rose-400 transition hover:bg-rose-500 hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded-2xl border-2 border-red-500 bg-red-50 py-7 text-3xl font-black text-red-600 transition hover:bg-red-500 hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
                 disabled={busy}
                 onClick={() => handleButton("no")}
                 type="button"
               >
-                NO <span className="text-base font-normal opacity-60">[N]</span>
+                NO <span className="text-lg font-semibold opacity-60">[N]</span>
               </button>
             </div>
           </div>
@@ -1190,7 +1264,7 @@ export function StudentDashboard() {
           <div className="w-full">
             <div className="grid grid-cols-2 gap-4">
               <button
-                className="rounded-2xl border-2 border-clinical-green/40 bg-clinical-green/10 py-6 text-3xl font-black text-clinical-green transition hover:bg-clinical-green hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 py-7 text-3xl font-black text-emerald-600 transition hover:bg-emerald-500 hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 shadow-sm"
                 disabled={busy || !sessionId}
                 onClick={() => handleButton("yes")}
                 type="button"
@@ -1198,7 +1272,7 @@ export function StudentDashboard() {
                 YES
               </button>
               <button
-                className="rounded-2xl border-2 border-rose-500/40 bg-rose-500/10 py-6 text-3xl font-black text-rose-400 transition hover:bg-rose-500 hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded-2xl border-2 border-red-400 bg-red-50 py-7 text-3xl font-black text-red-600 transition hover:bg-red-500 hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 shadow-sm"
                 disabled={busy || !sessionId}
                 onClick={() => handleButton("no")}
                 type="button"
@@ -1213,33 +1287,33 @@ export function StudentDashboard() {
         {textAction && sessionId && !isComplete ? (
           <div className="w-full">
             <button
-              className="w-full rounded-2xl border-2 border-clinical-green bg-clinical-green/20 py-6 text-3xl font-black text-clinical-green transition hover:bg-clinical-green hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+              className="w-full rounded-2xl border-2 border-blue-600 bg-blue-50 py-7 text-3xl font-black text-blue-600 transition hover:bg-blue-600 hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 shadow-sm"
               disabled={busy || !sessionId}
               onClick={handleTextButton}
               type="button"
             >
               {String(textAction.metadata.fallback_button_label ?? "DONE")}
-              <span className="ml-3 text-base font-normal opacity-60">[Y]</span>
+              <span className="ml-3 text-lg font-semibold opacity-60">[Y]</span>
             </button>
           </div>
         ) : null}
 
         {/* Protocol stage */}
         {sessionId ? (
-          <div className="w-full rounded-xl border border-white/10 bg-white/5 px-5 py-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-3">
+          <div className="w-full rounded-2xl border-2 border-slate-200 bg-white px-6 py-5 shadow-sm">
+            <p className="text-sm font-bold uppercase tracking-widest text-slate-500 mb-4">
               Protocol Stage
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2.5">
               {PROFESSOR_WORKFLOW_STEPS.map((step, i) => {
                 const st = getWorkflowStepStatus(i, currentState?.id);
                 return (
                   <span
                     key={step.label}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                      st === "complete" ? "bg-clinical-green/20 text-clinical-green"
-                      : st === "current" ? "bg-white text-slate-900 font-bold"
-                      : "bg-white/5 text-slate-700"
+                    className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                      st === "complete" ? "bg-emerald-100 text-emerald-700"
+                      : st === "current" ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-400"
                     }`}
                   >
                     {step.label}
@@ -1261,10 +1335,10 @@ export function StudentDashboard() {
         ) : null}
 
         {/* Footer toolbar */}
-        <div className="w-full flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-5 py-3">
+        <div className="w-full flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="flex flex-wrap gap-2">
             <button
-              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 transition"
+              className="rounded-lg border-2 border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 transition"
               disabled={!sessionId || exportingCsv}
               onClick={() => void handleCsv()}
               type="button"
@@ -1272,7 +1346,7 @@ export function StudentDashboard() {
               {exportingCsv ? "Exporting…" : "Export CSV"}
             </button>
             <button
-              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 transition"
+              className="rounded-lg border-2 border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 transition"
               disabled={!sessionId || exportingClinical}
               onClick={() => void handleClinicalCsv()}
               type="button"
@@ -1280,7 +1354,7 @@ export function StudentDashboard() {
               {exportingClinical ? "Exporting…" : "Clinical Timeline"}
             </button>
             <button
-              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 transition"
+              className="rounded-lg border-2 border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 transition"
               disabled={!sessionId || exportingXlsx}
               onClick={() => void handleXlsx()}
               type="button"
@@ -1288,7 +1362,7 @@ export function StudentDashboard() {
               {exportingXlsx ? "Generating…" : "Export Excel Timeline"}
             </button>
             <button
-              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 transition"
+              className="rounded-lg border-2 border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 transition"
               disabled={!sessionId || downloadingPdf}
               onClick={() => void handlePdf()}
               type="button"
@@ -1296,7 +1370,7 @@ export function StudentDashboard() {
               {downloadingPdf ? "Generating…" : "PDF Report"}
             </button>
             <button
-              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 transition"
+              className="rounded-lg border-2 border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 transition"
               disabled={!sessionId}
               onClick={() => setShowReplay((v) => !v)}
               type="button"
@@ -1304,7 +1378,7 @@ export function StudentDashboard() {
               {showReplay ? "Hide Replay" : "View Replay"}
             </button>
           </div>
-          <span className="font-mono text-[10px] text-slate-700 truncate max-w-[14rem]">
+          <span className="font-mono text-xs text-slate-400 truncate max-w-[14rem]">
             {sessionId ?? "No session"}
           </span>
         </div>

@@ -165,33 +165,80 @@
         {
           "id": "apnea_yes",
           "trigger": "action",
-          "target_state": "heart_rate_assessment",
+          "target_state": "measure_heart_rate",
           "action_id": "is_apneic",
           "expected_response": "yes"
         },
         {
           "id": "apnea_no",
           "trigger": "action",
-          "target_state": "heart_rate_assessment",
+          "target_state": "measure_heart_rate",
           "action_id": "is_apneic",
           "expected_response": "no"
         },
         {
           "id": "instructor_sends_to_hr",
           "trigger": "instructor",
-          "target_state": "heart_rate_assessment",
+          "target_state": "measure_heart_rate",
           "instructor_event": "assess_heart_rate"
+        }
+      ]
+    },
+    {
+      "id": "measure_heart_rate",
+      "name": "Measure Heart Rate",
+      "description": "Instruct the student to measure the heart rate.",
+      "metadata": {
+        "voice_prompt": "Measure heart rate."
+      },
+      "actions": [
+        {
+          "id": "heart_rate_measured",
+          "type": "text",
+          "prompt": "Say 'Done' to confirm.",
+          "options": [],
+          "metadata": {
+            "fallback_button_label": "DONE",
+            "text_synonyms": [
+              "done",
+              "completed",
+              "finished",
+              "placed",
+              "ok",
+              "okay",
+              "done sir",
+              "completed sir",
+              "done ma'am",
+              "completed ma'am",
+              "done doctor",
+              "completed doctor"
+            ]
+          }
+        }
+      ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "heart_rate_measurement_done",
+          "trigger": "action",
+          "target_state": "heart_rate_assessment",
+          "action_id": "heart_rate_measured",
+          "text_match": "done"
+        },
+        {
+          "id": "instructor_advance_to_hr_check",
+          "trigger": "instructor",
+          "target_state": "heart_rate_assessment",
+          "instructor_event": "advance_to_hr_check"
         }
       ]
     },
     {
       "id": "heart_rate_assessment",
       "name": "Heart Rate Assessment",
-      "description": "Measure heart rate. Is it greater than 100 bpm?",
+      "description": "Is the heart rate greater than 100 bpm?",
       "metadata": {
-        "voice_prompt": "Measure heart rate. Is the heart rate greater than 100 beats per minute?",
-        "voice_prompt_parts": ["Measure heart rate.", "Is the heart rate greater than 100 beats per minute?"],
-        "voice_prompt_parts_delay_ms": 3000
+        "voice_prompt": "Is the heart rate greater than 100 beats per minute?"
       },
       "actions": [
         {
@@ -243,12 +290,25 @@
         {
           "id": "start_ventilation",
           "type": "text",
-          "prompt": "Say 'Ventilation started' to confirm.",
+          "prompt": "Say 'Done' to confirm.",
           "options": [],
           "metadata": {
             "intervention": "ventilation",
-            "fallback_button_label": "VENTILATION STARTED",
-            "text_synonyms": ["ventilation"]
+            "fallback_button_label": "DONE",
+            "text_synonyms": [
+              "done",
+              "completed",
+              "finished",
+              "placed",
+              "ok",
+              "okay",
+              "done sir",
+              "completed sir",
+              "done ma'am",
+              "completed ma'am",
+              "done doctor",
+              "completed doctor"
+            ]
           }
         }
       ],
@@ -259,7 +319,7 @@
           "trigger": "action",
           "target_state": "ventilation_in_progress",
           "action_id": "start_ventilation",
-          "text_match": "ventilation"
+          "text_match": "done"
         },
         {
           "id": "instructor_start_ventilation",
@@ -367,17 +427,59 @@
       "name": "Ventilation Corrective Steps",
       "description": "Perform corrective steps: reposition, suction, increase pressure.",
       "metadata": {
-        "voice_prompt": "Follow ventilation corrective steps."
+        "voice_prompt": "Follow ventilation corrective steps and measure heart rate every 15 seconds."
       },
       "actions": [
         {
           "id": "corrective_steps_done",
-          "type": "yes_no",
-          "prompt": "Have you completed all corrective ventilation steps?",
-          "options": ["yes", "no"],
-          "metadata": { "intervention": "ventilation_correction" }
+          "type": "text",
+          "prompt": "Say 'Done' to confirm corrective steps completed.",
+          "options": [],
+          "metadata": {
+            "intervention": "ventilation_correction",
+            "fallback_button_label": "DONE",
+            "text_synonyms": [
+              "done",
+              "completed",
+              "finished",
+              "placed",
+              "ok",
+              "okay",
+              "done sir",
+              "completed sir",
+              "done ma'am",
+              "completed ma'am",
+              "done doctor",
+              "completed doctor"
+            ]
+          }
         }
       ],
+      "timers": [],
+      "transitions": [
+        {
+          "id": "corrective_steps_complete",
+          "trigger": "action",
+          "target_state": "ventilation_corrective_buffer",
+          "action_id": "corrective_steps_done",
+          "text_match": "done"
+        },
+        {
+          "id": "instructor_corrective_ventilation_complete",
+          "trigger": "instructor",
+          "target_state": "heart_rate_after_ventilation",
+          "instructor_event": "corrective_ventilation_complete"
+        }
+      ]
+    },
+    {
+      "id": "ventilation_corrective_buffer",
+      "name": "Corrective Ventilation Buffer",
+      "description": "30-second pause after corrective steps before reassessment.",
+      "metadata": {
+        "voice_prompt": "Corrective ventilation in progress."
+      },
+      "actions": [],
       "timers": [
         {
           "id": "corrective_ventilation_timer",
@@ -389,23 +491,16 @@
       ],
       "transitions": [
         {
-          "id": "corrective_steps_complete",
-          "trigger": "action",
-          "target_state": "heart_rate_after_ventilation",
-          "action_id": "corrective_steps_done",
-          "expected_response": "yes"
-        },
-        {
           "id": "corrective_ventilation_timer_done",
           "trigger": "timer",
           "target_state": "heart_rate_after_ventilation",
           "timer_id": "corrective_ventilation_timer"
         },
         {
-          "id": "instructor_corrective_ventilation_complete",
+          "id": "instructor_corrective_buffer_complete",
           "trigger": "instructor",
           "target_state": "heart_rate_after_ventilation",
-          "instructor_event": "corrective_ventilation_complete"
+          "instructor_event": "corrective_ventilation_buffer_complete"
         }
       ]
     },

@@ -8,13 +8,14 @@ export const PROFESSOR_WORKFLOW_STEPS: WorkflowStep[] = [
   { label: "Positioning",     stateIds: ["put_on_mothers_chest"] },
   { label: "Crying?",         stateIds: ["crying_assessment"] },
   { label: "Apnea?",          stateIds: ["apnea_assessment"] },
-  { label: "Heart Rate",      stateIds: ["heart_rate_assessment"] },
+  { label: "Heart Rate",      stateIds: ["measure_heart_rate", "heart_rate_assessment"] },
   {
     label: "Ventilation",
     stateIds: [
       "ventilation_path",
       "ventilation_in_progress",
-      "ventilation_corrective_steps"
+      "ventilation_corrective_steps",
+      "ventilation_corrective_buffer"
     ]
   },
   {
