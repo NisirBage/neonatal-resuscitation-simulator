@@ -99,7 +99,9 @@ jobs:
   #    server needed). Uses Chromium only to keep CI fast.
   playwright-e2e:
     name: Playwright E2E
-    runs-on: ubuntu-latest
+    # ubuntu-latest moved to Ubuntu 26 in Oct 2026, where
+    # `playwright install --with-deps` fails; pin to 24.04.
+    runs-on: ubuntu-24.04
     needs: typescript-check
 
     defaults:
