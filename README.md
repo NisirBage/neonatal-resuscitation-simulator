@@ -12,7 +12,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/NisirBage/neonatal-resuscitation-simulator/ci.yml?label=CI&logo=github-actions&logoColor=white)](https://github.com/NisirBage/neonatal-resuscitation-simulator/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[Live Demo](#demo) · [Quick Start](#quick-start--local-development) · [API Docs](#api-reference) · [Roadmap](ROADMAP.md)
+[Demo](#demo) · [Quick Start](#quick-start--local-development) · [API Docs](#api-reference) · [Roadmap](ROADMAP.md)
 
 </div>
 
@@ -322,15 +322,6 @@ All four formats are generated on demand from the immutable event log. No data i
 ---
 
 ## Demo
-
-> **Video demonstration:** A recorded walkthrough of the complete NRP simulation will be linked here following the first public demonstration.
-
-### Live Demo
-
-| URL | Description |
-|-----|-------------|
-| Production backend | Deployed on Railway — see environment setup |
-| Production frontend | Deployed on Vercel — see environment setup |
 
 ### Running a Demo Locally
 
